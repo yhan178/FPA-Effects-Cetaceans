@@ -1,0 +1,402 @@
+---
+title: "DiD_analysis_PAs_effect_on_porpoises"
+author: "Yi Han"  
+date: "2024-07-05"
+output: html_document
+---
+
+**Email**: [yi.han.178\@gmail.com](mailto:yi.han.178@gmail.com){.email}\
+**Description**: The following code aims to test (1) whether the porpoise abundance was higher and less prone to decline in the PAs than the non-PAs in 2006 and 2017 (Fig 4a & b) and (2) whether the magnitude of abundance decrease is smaller in the PAs (Fig 4c).
+
+```{r include=FALSE}
+library(tidyverse)
+library(gghalves)
+library(MASS)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+```
+
+## 1. Data preparation
+
+(a) Load the file *segment_wise_porpoise_abundance.csv* produced by *analysis_river_lengths_against_abund_ranks.Rmd*\
+
+```{r}
+seg_abund_df <- read.csv(file = "../02_percentage_coverage_of_PAs/segment_wise_porpoise_abundance.csv")
+
+group_levels <- seg_abund_df$groups[1:150]
+seg_abund <- seg_abund_df %>%
+      mutate(reserve = as.factor(reserve),
+             reserve_without_nj = as.factor(reserve_without_nj),
+             f_year = as.factor(f_year),
+             abund_ranks = as.factor(abund_ranks),
+             groups = factor(groups, levels=group_levels))
+head(seg_abund, 5)
+```
+
+(b) Create a new dataframe with each year as a new column and the corresponding segment-wise abundance as inputs.\
+
+```{r}
+seg_abund_wide <- seg_abund %>% 
+    dplyr::select(groups, f_year, segment_mean, reserve, reserve_without_nj) %>%
+    tidyr::pivot_wider(., names_from = f_year, values_from = segment_mean) 
+head(seg_abund_wide, 5)
+str(seg_abund_wide)
+```
+(c) Create a new column stores the values of abundance change between 2006 and 2017.  
+```{r}
+seg_abund_wide <- seg_abund_wide %>%
+    rename(abund_06 = "2006", 
+           abund_17 = "2017") %>%
+    mutate(abund_change = abund_17-abund_06)
+head(seg_abund_wide, 5)
+```
+
+```{r}
+cat("\n----Propoise abundance summary statistics in 2006 and 2017----\n")
+abund_06 <- summary(seg_abund_wide$abund_06)
+abund_17 <- summary(seg_abund_wide$abund_17)
+cat("Summary statistics in 2006: \n")
+print(abund_06)
+cat("\n")
+cat("Summary statistics in 2017: \n")
+print(abund_17)
+# wilcox.test(seg_abund_wide$abund_06, seg_abund_wide$abund_17, alternative = "g")
+# wilcox.test(seg_abund_wide$abund_06, seg_abund_wide$abund_17)
+```
+
+### Mann–Whitney U test to examine whether the porpoise abundance in the PAs is higher than that in the non-PAs in 2006 with three threshold
+
+```{r}
+thresholds <- c(0.00001, 0.05, 0.1)
+
+for (threshold in thresholds) {
+  cat("\n----------- Results for Exclusion Abundance < ", threshold, " porpoise km-1 -----------\n")
+
+  seg_abund_wide_exl <- seg_abund_wide |> 
+    filter(!(abund_06 < threshold & abund_17 < threshold))  |> 
+    droplevels()
+
+  cat("\n----Number of Segments excluded----\n")
+  seg_abund_low <- seg_abund_wide %>%
+    filter((abund_06 < threshold & abund_17 < threshold)) 
+  print(summary(seg_abund_low$reserve))
+  
+  abund_06_PA <- seg_abund_wide_exl %>% filter(reserve_without_nj=="Y") %>% pull(abund_06)
+  abund_06_nonPA <- seg_abund_wide_exl %>% filter(reserve_without_nj=="N") %>% pull(abund_06)
+
+  outputs_06 <- c(mean(abund_06_PA), sd(abund_06_PA), mean(abund_06_nonPA), sd(abund_06_nonPA))
+  names(outputs_06) <- c("abund_06_PA_mean", "abund_06_PA_sd", "abund_06_nonPA_mean", "abund_06_nonPA_sd")
+
+  cat("\n\n----Statistics for 2006 at threshold ", threshold, ":----\n")
+  print(outputs_06)
+  wilcox_06 <- wilcox.test(abund_06 ~ reserve_without_nj, data=seg_abund_wide_exl)
+  cat("\n\n----Mann–Whitney U test for 2006:----\n")
+  print(wilcox_06)
+  
+  abund_17_PA <- seg_abund_wide_exl %>% filter(reserve=="Y") %>% pull(abund_17)
+  abund_17_nonPA <- seg_abund_wide_exl %>% filter(reserve=="N") %>% pull(abund_17)
+  
+  outputs_17 <- c(mean(abund_17_PA), sd(abund_17_PA), mean(abund_17_nonPA), sd(abund_17_nonPA))
+  names(outputs_17) <- c("abund_17_PA_mean", "abund_17_PA_sd", "abund_17_nonPA_mean", "abund_17_nonPA_sd")
+  
+  cat("\n-----Statistics for 2017 at threshold ", threshold, ":----\n")
+  print(outputs_17)
+  wilcox_17 <- wilcox.test(abund_17 ~ reserve, data=seg_abund_wide_exl)
+  cat("\n\n----Mann–Whitney U test for 2017:----\n")
+  print(wilcox_17)
+}
+```
+
+## Difference-in-difference analysis
+
+### Threshold: excluding river segments with 0 porpoise km-1 in both 2006 and 2017.
+```{r}
+threshold <- 0.000001
+
+seg_abund_wide_exl <- seg_abund_wide |> 
+    filter(!(abund_06 < threshold & abund_17 < threshold))  |> 
+    droplevels()
+# str(seg_abund_wide_exl)
+```
+
+```{r}
+# seg_abund_wide_exl
+
+seg_abund_wide_exl_long <- seg_abund_wide_exl |>
+  dplyr::select(groups, abund_06, abund_17, reserve) |> 
+  pivot_longer(
+    cols = starts_with("abund"),
+    names_to = "year",
+    values_to = "abundance"
+  ) |> 
+  mutate(year = recode(year, abund_06 = "2006", abund_17 = "2017"))
+
+# seg_abund_wide_exl_long
+```
+
+```{r}
+# Create the binary variables for DID
+seg_abund_wide_exl_binary <- seg_abund_wide_exl_long %>%
+  mutate(
+    PA = ifelse(reserve == "Y", 1, 0),
+    Post = ifelse(year == 2017, 1, 0)
+  )
+head(seg_abund_wide_exl_binary)
+```
+
+```{r}
+did_model <- lm(abundance ~ PA + Post + PA:Post, data = seg_abund_wide_exl_binary)
+summary(did_model)
+```
+
+```{r}
+library(sandwich)
+library(lmtest)
+library(zoo)
+coeftest(did_model, vcov = vcovHC(did_model, type = "HC1"))
+
+```
+
+```{r}
+# Creating a data frame from your model output
+results <- data.frame(
+  Term = c("Intercept", "PA", "Post", "PA:Post"),
+  Estimate = round(c(0.13375, 0.079335, -0.034864, -0.058372), 4),
+  `Std Error` = round(c(0.013439, 0.029305, 0.017415, 0.034944), 4),
+  `t value` = round(c(9.9520, 2.7072, -2.0020, -1.6704), 4),
+  `p-value` = c("< 2.2e-16", "0.0072", "0.0462", "0.0959")
+)
+results$Significance <- c("***", "**", "*", ".")
+
+kable(results, format = "html", caption = "Statistical Results of Difference-in-Differences Analysis")
+
+results_table <- kable(results, format = "html", booktabs = TRUE, 
+                       caption = "Statistical Results of Difference-in-Differences Analysis") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>% # Make the first column bold
+  column_spec(5, color = "red") # Change the color for p-values for emphasis
+
+# To display the table in R Markdown or output it to an HTML report
+results_table
+```
+
+
+### Threshold: excluding river segments with porpoise abundance < 0.05 porpoise km-1 in both 2006 and 2017.
+```{r}
+threshold <- 0.05
+
+seg_abund_wide_exl <- seg_abund_wide |> 
+    filter(!(abund_06 < threshold & abund_17 < threshold))  |> 
+    droplevels()
+# str(seg_abund_wide_exl)
+
+```
+
+```{r}
+# seg_abund_wide_exl
+
+seg_abund_wide_exl_long <- seg_abund_wide_exl |>
+  dplyr::select(groups, abund_06, abund_17, reserve) |> 
+  pivot_longer(
+    cols = starts_with("abund"),
+    names_to = "year",
+    values_to = "abundance"
+  ) |> 
+  mutate(year = recode(year, abund_06 = "2006", abund_17 = "2017"))
+
+# seg_abund_wide_exl_long
+```
+
+```{r}
+# Create the binary variables for DID
+seg_abund_wide_exl_binary <- seg_abund_wide_exl_long %>%
+  mutate(
+    PA = ifelse(reserve == "Y", 1, 0),
+    Post = ifelse(year == 2017, 1, 0)
+  )
+head(seg_abund_wide_exl_binary)
+```
+
+```{r}
+did_model <- lm(abundance ~ PA + Post + PA:Post, data = seg_abund_wide_exl_binary)
+summary(did_model)
+```
+
+```{r}
+coeftest(did_model, vcov = vcovHC(did_model, type = "HC1"))
+```
+
+```{r}
+# Creating a data frame from your model output
+results <- data.frame(
+  Term = c("Intercept", "PA", "Post", "PA:Post"),
+  Estimate = round(c(0.157954, 0.088957, -0.041158, -0.068487), 4),
+  `Std Error` = round(c(0.014813, 0.031462, 0.019349, 0.037840), 4),
+  `t value` = round(c(10.6634, 2.8274, -2.1271, -1.8099), 4),
+  `p-value` = c("< 2.2e-16", "0.0051", "0.0344", "0.0716")
+)
+results$Significance <- c("***", "**", "*", ".")
+
+kable(results, format = "html", caption = "Statistical Results of Difference-in-Differences Analysis")
+
+results_table <- kable(results, format = "html", booktabs = TRUE, 
+                       caption = "Statistical Results of Difference-in-Differences Analysis") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>% # Make the first column bold
+  column_spec(5, color = "red") # Change the color for p-values for emphasis
+
+# To display the table in R Markdown or output it to an HTML report
+results_table
+```
+
+### Threshold: excluding river segments with porpoise abundance < 0.1 porpoise km-1 in both 2006 and 2017.
+```{r}
+threshold <- 0.1
+
+seg_abund_wide_exl <- seg_abund_wide |> 
+    filter(!(abund_06 < threshold & abund_17 < threshold))  |> 
+    droplevels()
+# str(seg_abund_wide_exl)
+
+```
+
+```{r}
+# seg_abund_wide_exl
+
+seg_abund_wide_exl_long <- seg_abund_wide_exl |>
+  dplyr::select(groups, abund_06, abund_17, reserve) |> 
+  pivot_longer(
+    cols = starts_with("abund"),
+    names_to = "year",
+    values_to = "abundance"
+  ) |> 
+  mutate(year = recode(year, abund_06 = "2006", abund_17 = "2017"))
+
+# seg_abund_wide_exl_long
+```
+
+```{r}
+# Create the binary variables for DID
+seg_abund_wide_exl_binary <- seg_abund_wide_exl_long %>%
+  mutate(
+    PA = ifelse(reserve == "Y", 1, 0),
+    Post = ifelse(year == 2017, 1, 0)
+  )
+head(seg_abund_wide_exl_binary)
+```
+
+```{r}
+did_model <- lm(abundance ~ PA + Post + PA:Post, data = seg_abund_wide_exl_binary)
+summary(did_model)
+```
+
+```{r}
+coeftest(did_model, vcov = vcovHC(did_model, type = "HC1"))
+```
+
+```{r}
+# Creating a data frame from your model output
+results <- data.frame(
+  Term = c("Intercept", "PA", "Post", "PA:Post"),
+  Estimate = round(c(0.190178, 0.101795, -0.055263, -0.081872), 4),
+  `Std Error` = round(c(0.016708, 0.033190, 0.022473, 0.041282), 4),
+  `t value` = round(c(11.3827, 3.0671, -2.4591, -1.9833), 4),
+  `p value` = c("< 2.2e-16", "0.0025", "0.0148", "0.0488")
+)
+results$Significance <- c("***", "**", "*", ".")
+
+kable(results, format = "html", caption = "Statistical Results of Difference-in-Differences Analysis")
+
+results_table <- kable(results, format = "html", booktabs = TRUE, 
+                       caption = "Statistical Results of Difference-in-Differences Analysis") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE) %>% # Make the first column bold
+  column_spec(5, color = "red") # Change the color for p-values for emphasis
+
+# To display the table in R Markdown or output it to an HTML report
+results_table
+```
+
+
+### Plotting
+__Plot porpoise abundance in 2006 (PAs v.s. non-PAs)__  
+
+```{r}
+abund_06 <- ggplot(seg_abund_wide_exl, aes(x = reserve_without_nj, y=abund_06)) +
+    geom_half_boxplot(fill="grey70")+
+    geom_half_point(color="grey30")+
+    scale_y_continuous(limits = c(0, 0.9), breaks=seq(0, 0.9, 0.2)) +
+    scale_x_discrete(limits = c("Y", "N"),
+                     breaks = c("Y", "N"),
+                     labels = c("FPAs", "non-FPAs")) +
+    labs (x = "", y = expression(paste("Encounter rate in 2006 ", "(", "porpoise km"^" -1", ")"))) +
+    theme_classic(base_size = 14) +
+    theme(legend.position.inside = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+abund_06
+```
+
+__Plot porpoise abundance in 2017 (PAs v.s. non-PAs)__  
+```{r}
+abund_17 <- ggplot(seg_abund_wide_exl, aes(x = reserve, y=abund_17)) +
+    geom_half_boxplot(fill="grey70")+
+    geom_half_point(color="grey30")+
+    scale_y_continuous(limits = c(0, 0.6), breaks=seq(0, 0.6, 0.2)) +
+    scale_x_discrete(limits = c("Y", "N"),
+                     breaks = c("Y", "N"),
+                     labels = c("FPAs", "non-FPAs")) +
+    labs (x = "", y = expression(paste("Encounter rate in 2017 ", "(", "porpoise km"^" -1", ")"))) +
+    theme_classic(base_size = 14) +
+    theme(legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+
+abund_17
+```
+
+__Plot DiD analysis results__  
+
+```{r}
+data_summary <- seg_abund_wide_exl_binary %>%
+  group_by(PA, year) %>%
+  summarise(Abundance = mean(abundance), .groups = 'drop') |> 
+  mutate()
+
+data_summary
+```
+
+
+```{r}
+data <- data.frame(
+  Group = rep(c("FPAs", "non-FPAs"), each = 2),
+  Year = rep(c("2006", "2017"), 2),
+  Abundance = c(0.2919730, 0.1548378, 0.1901780, 0.1349153)  # Sample mean values
+)
+
+abund_change <- ggplot(data, aes(x = Year, y = Abundance, group = Group)) +
+  geom_line(aes(linetype = Group), size = 1.2) +
+  geom_point(size = 3) +
+  # scale_color_manual(values = c("FPA" = "black", "non-FPA" = "black")) +
+  labs(x = "Year",
+       y = expression(paste("Average encounter rate ", "(", "porpoise km"^" -1", ")"))
+       ) +
+  theme_classic(base_size = 14) +
+  theme(legend.position = c(.99, .99),
+        legend.justification = c("right", "top"),
+        legend.box.just = "right",
+        legend.title = element_blank())
+abund_change
+```
+
+
+```{r fig.width=8, fig.height=4, tags=c()}
+
+combined_plot <- grid.arrange(abund_06, abund_17, abund_change, ncol = 3) 
+combined_plot
+```
+```{r}
+ggsave("combined_plots.png", combined_plot, width = 12, height = 4)
+```
+

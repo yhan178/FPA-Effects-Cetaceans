@@ -1,0 +1,114 @@
+---
+title: "Examining changes of the segment-wise urban%"
+author: "Yi Han"  
+date: "2021-11-22"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: The file examines the changes of the segment-wise urban% 
+from 2001 to 2017. We conducted cluster analysis and classified river segments 
+into four different urban development levels. The results are shown in Table S2.  
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+## 1. Data preparation  
+
+Get a dataframe with:  
+(1) the initial urban% (i.e., urban% of the year 2001),  
+(2) the increment of the urban% from 2001 to 2017, and  
+(3) the percentage increase of the urban% from 2001 to 2017.  
+
+```{r}
+seg_urban_df <- read.csv(file="../../data/processed/seg_wise_urban.csv")
+
+groups_levels <- seg_urban_df %>% filter(year==2001) %>% pull(groups)
+seg_urban_df <- seg_urban_df %>%
+    mutate(f_year = as.factor(f_year)) %>%
+    mutate(groups = factor(groups, levels=groups_levels)) %>% # get the group levels right
+    mutate(f_group = as.numeric(groups))
+str(seg_urban_df)
+```
+
+```{r}
+seg_urban_01_df <- seg_urban_df %>% 
+    filter(year==2001) %>% 
+    select(groups, f_group, seg_urban_perc) %>%
+    rename(seg_urban_perc_01 = seg_urban_perc)
+# head(seg_urban_01_df, 5)
+
+seg_urban_17_df <- seg_urban_df %>% 
+    filter(year==2017) %>% 
+    select(groups, f_group, seg_urban_perc) %>%
+    rename(seg_urban_perc_17 = seg_urban_perc)
+# head(seg_urban_17_df, 5)
+
+df_urban_incre <- seg_urban_01_df %>%
+    left_join(seg_urban_17_df, by = c("groups", "f_group")) %>%
+    mutate(increment = seg_urban_perc_17 - seg_urban_perc_01) %>%
+    mutate(incre_perc = increment/seg_urban_perc_17) %>%
+    mutate(incre_perc = case_when(is.na(incre_perc) ~ 0,
+                                         TRUE ~ incre_perc)) %>%
+    rename(intl = seg_urban_perc_01, 
+           end = seg_urban_perc_17)
+head(df_urban_incre)
+```
+
+__Plot and check the distribution of the incre_perc.__
+```{r}
+boxplot(df_urban_incre$incre_perc)
+```
+## 2. Cluster analysis of the urban development levels  
+
+__Choose and scale the variables used for cluster analysis.__  
+
+```{r}
+clust_var <- c("intl", "increment", "incre_perc")
+
+urb_std <- df_urban_incre %>%
+  dplyr::select(all_of(clust_var)) %>%
+  scale(.) # use scales to standardize all variables
+```
+
+__K-mean cluster analysis__   
+
+Identify the optimal number of clusters. Plot the total within-cluster 
+sum of squares against each number of clusters k (Figure S2).
+
+```{r}
+# K-mean cluster
+wssplot <- function(data, nc=15, seed=178){
+  wss <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] <- sum(kmeans(data, centers=i)$withinss)}
+  plot(1:nc, wss, type="b", xlab="Number of Clusters",
+       ylab="Within groups sum of squares")} 
+
+wssplot(urb_std, nc=8) 
+```
+Based on the following graph and considering the relatively small number of segments, 
+we classified segments into four clusters.   
+
+```{r}
+set.seed(178) # k-means clustering algorithm starts with k randomly selected centroids,
+# using set.seed() function for reproducible results.
+k_means_fit <- kmeans(urb_std, 4) 
+df_urban_incre_kmean <- df_urban_incre %>%
+    mutate(development_levels = factor(k_means_fit$cluster, 
+        labels = c("less-developed", "fast-developing", "highly-developed", "developed") )) %>%
+    select(groups, intl, increment, incre_perc, development_levels)
+head(df_urban_incre_kmean, 5)
+tail(df_urban_incre_kmean, 5)
+str(df_urban_incre_kmean)
+```
+
+__Save the results as a csv file (see Table S2)__
+
+```{r}
+# write.csv(df_urban_incre_kmean, 
+#           file = "../../data/analysis_outputs/trend_analysis/urban_cluster_results.csv", 
+#           row.names = FALSE)
+```
+

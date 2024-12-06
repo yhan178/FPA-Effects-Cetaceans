@@ -1,0 +1,318 @@
+---
+title: "Summarizing features of representative river sections of porpoise distribution"
+author: "Yi Han"  
+date: "2021-12-03"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: The following code first summarized the segment-wise porpoise 
+abundance changes, changing trends of the floodplain area and cropland%, 
+and urban development levels (see section 1. segment-wise porpoise abundance changes 
+and habitat changes). This piece of code was derived from the file
+_'plot_segment_wise_habitat_changes_and_porpoise_gaps.Rmd'_ in folder
+_'trend_analysis_habitats\'_. 
+
+```{r include=FALSE}
+library(tidyverse)
+library(mclust)
+library(nnet)
+library(broom)
+library(gridExtra)
+```
+
+## 1. segment-wise porpoise abundance changes and habitat changes
+
+1.1 We define a distribution gap of the porpoise as a river sections with extremely
+low porpoise abundance, i.e., < 0.05 porpoise per km, in both 2006 and 2017.   
+
+```{r}
+seg_wise_abund_df <- read.csv(file="../02_percentage_coverage_of_PAs/segment_wise_porpoise_abundance.csv")
+head(seg_wise_abund_df, 5)
+```
+
+```{r}
+group_levels <- seg_wise_abund_df$groups[1:150]
+abund_df <- seg_wise_abund_df %>%
+    dplyr::select(groups, year, segment_mean, reserve, reserve_without_nj) %>%
+    dplyr::mutate(groups = factor(groups, levels=group_levels)) %>%
+    dplyr::mutate(group_levels = as.numeric(groups)) %>%
+    tidyr::pivot_wider(., names_from = year, values_from = segment_mean) %>%
+    dplyr::rename(abund_06 = "2006", abund_17 = "2017") %>%
+    dplyr::mutate(abund_change = abund_17 - abund_06) %>%
+    dplyr::filter(group_levels <= 145) |> 
+    dplyr::select(groups, group_levels, abund_06, abund_17, abund_change, reserve, reserve_without_nj)
+head(abund_df, 5)
+```
+
+1.2 We grouped river segments into decreased and stable categories given whether 
+the floodplain area showed a significant decline. We grouped the nine segments 
+with a decreased floodplain area into the stable category (see Appendix S3 for 
+more details).  
+
+```{r}
+seg_wise_floodplain_df <-
+    read.csv(file="../trend_analysis_habitats/floodplain_area_regression_results.csv")
+
+group_lvls <- seg_wise_floodplain_df$groups
+floodplain_df <- seg_wise_floodplain_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(flp_area_trend = case_when((p_value < 0.05 & slope < 0) ~ "decreased",
+                                TRUE ~ "stable")) %>%
+    mutate(flp_area_trend = factor(flp_area_trend, 
+                                    levels = c("decreased", "stable"))) |> 
+    dplyr::select(groups, group_levels, flp_area_trend)
+
+head(floodplain_df, 5)
+```
+
+1.3 We grouped river segments into increased and stable categories given whether 
+the cropland% showed a significant increase. We grouped the four segments 
+with an increased cropland% into the stable category (see Appendix S3 for 
+more details).  
+
+```{r}
+seg_wise_cropland_df <- read.csv(file="../trend_analysis_habitats/cropland_perc_regression_results.csv")
+
+cropland_df <- seg_wise_cropland_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(crop_perc_trend = case_when((p_value < 0.05 & slope > 0) ~ "increased",
+                             TRUE ~ "stable")) %>% 
+    mutate(crop_perc_trend = factor(crop_perc_trend, 
+                                    levels = c("increased", "stable"))) |> 
+    dplyr::select(groups, group_levels, crop_perc_trend)
+head(cropland_df, 5)
+```
+
+We grouped the “developed” and the “highly developed” as one category as 
+“developed”, representing those river segments with relatively large urban% 
+and large increment in urban% (see Appendix S3 for more details).  
+
+```{r}
+seg_wise_urban_df <- read.csv(file="../trend_analysis_habitats/urban_cluster_results.csv")
+
+urban_df <- seg_wise_urban_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    filter(group_levels <= 145) %>%
+    droplevels() %>%
+    mutate(urban_levels = case_when(
+       development_levels=="less-developed" ~ "Less developed",
+       development_levels=="fast-developing" ~ "Fast developing",
+       TRUE ~ "Developed")) %>%
+    mutate(urban_levels = factor(urban_levels, 
+       levels = c("Developed", "Fast developing", "Less developed"))) |> 
+    dplyr::select(groups, group_levels, urban_levels)
+head(urban_df, 5)
+```
+
+Combine above dataframes into a single dataframe for multivariate linear regression
+
+```{r}
+df <- abund_df |> 
+    left_join(floodplain_df, by=c("groups", "group_levels")) |> 
+    left_join(cropland_df, by=c("groups", "group_levels")) |> 
+    left_join(urban_df, by=c("groups", "group_levels"))
+df
+```
+
+## 2. Clustering Porpoise Abundance Changing Patterns using Gaussiam Mixture Model
+
+```{r}
+data_scaled <- scale(df[, c("abund_06", "abund_17", "abund_change")])
+```
+
+
+Try models with a range of Gaussian components and covariance structures
+
+```{r}
+numComponents <- 1:5
+covarianceModels <- c("EII", "EEI", "VII", "VEE", "EVI", "EEE", "EVE", "EVV", "VVV")
+
+# Initialize a data frame to store BIC values for each model
+bic_values <- matrix(nrow = length(numComponents), ncol = length(covarianceModels), dimnames = list(numComponents, covarianceModels))
+
+# Loop through each type of covariance model
+for(model in covarianceModels) {
+    # Fit the GMM for each covariance type across a range of components
+    fit <- Mclust(data_scaled, G = numComponents, modelNames = model)
+    print(model)
+    print(fit$BIC)
+}
+```
+
+# Find the model and number of components with the highest BIC
+
+```{r}
+gmm_result <- Mclust(data_scaled, G=5, modelNames = "VII")
+print(gmm_result$BIC)
+summary(gmm_result)
+df$gmm_cluster <- as.factor(gmm_result$classification)
+```
+
+```{r}
+pattern_plot1 <- ggplot(
+  df, aes(x = abund_06, y = abund_17, size = abund_change, color = gmm_cluster)
+  ) +
+  geom_point(alpha = 0.8) +  
+  scale_size_continuous(range = c(0.1, 3)) +
+  labs(x = expression(paste("Encounter rate in 2006 ", "(", "porpoise km"^" -1", ")")),
+       y = expression(paste("Encounter rate in 2017 ", "(", "porpoise km"^" -1", ")")),
+       size = expression(paste("Encounter rate in 2017 ", "(", "porpoise km"^" -1", ")")),
+       color = "Porpose abundance changing patterns") +
+  # ggtitle("Scatter Plot of Porpoise Abundance by Cluster") +
+  theme_minimal()
+pattern_plot1
+```
+
+```{r}
+pattern_plot2 <- ggplot(
+  df, aes(x = abund_06, y = abund_change, size = abund_17, color = gmm_cluster)
+  ) +
+  geom_point(alpha = 0.8) +  
+  scale_size_continuous(range = c(0.1, 3)) +
+  labs(x = expression(paste("Encounter rate in 2006 ", "(", "porpoise km"^" -1", ")")),
+       y = expression(paste("Change in encounter rates ", "(", "porpoise km"^" -1", ")")),
+       size = expression(paste("Encounter rate in 2017 ", "(", "porpoise km"^" -1", ")")),
+       color = "Porpose abundance changing patterns") +
+  # ggtitle("Scatter Plot of Porpoise Abundance by Cluster") +
+  theme_minimal()
+pattern_plot2
+```
+```{r}
+combined_plot <- grid.arrange(pattern_plot1, pattern_plot2, ncol = 1) 
+# combined_plot
+```
+
+```{r}
+ggsave("combined_plots_abundance_clustesrs.png", combined_plot, width = 8, height = 8)
+```
+
+We categorized river segments into five porpoise abundance patterns based on the outputs of the  Gaussian Mixture Model (GMM): 
+- no presence
+- consistently low
+- low-to-medium with minor decline
+- medium-to-high with major decline
+- increasing or high
+
+## multinominal logistic regression
+
+```{r}
+df$gmm_cluster <- factor(df$gmm_cluster, levels = c("2", "1", "3", "5", "4"))
+
+df$gmm_cluster <- fct_recode(df$gmm_cluster,
+                           "no_presence" = "2",
+                           "low_subtle_increase" = "1",
+                           "low_med_minor_decline" = "3",
+                           "med_high_major_decline" = "5", 
+                           "increasing_or_high" = "4")
+print(levels(df$gmm_cluster))
+```
+
+```{r}
+df$flp_area_trend <- factor(df$flp_area_trend, levels = c("stable", "decreased"))
+df$crop_perc_trend <- factor(df$crop_perc_trend, levels = c("stable", "increased"))
+df$urban_levels <- factor(df$urban_levels, 
+                          levels = c("Less developed", "Fast developing", "Developed"))
+```
+
+
+```{r}
+df_summary_agg_vals <- df |>  
+  group_by(gmm_cluster) |> 
+  summarise(mean_abund_17 = round(mean(abund_17), 3),
+            mean_abund_change = round(mean(abund_change), 3))
+df_summary_agg_vals
+```
+
+
+```{r}
+df$gmm_cluster <- relevel(df$gmm_cluster, ref = "no_presence")
+
+multinom_model <- multinom(gmm_cluster ~ flp_area_trend + crop_perc_trend + urban_levels + reserve, 
+                           data = df)
+
+mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |> 
+    mutate_if(is.numeric, round, 3) |> 
+    dplyr::filter(p.value < 0.1)
+
+mult_output
+```
+
+```{r}
+df$gmm_cluster <- relevel(df$gmm_cluster, ref = "low_subtle_increase")
+
+multinom_model <- multinom(gmm_cluster ~ flp_area_trend + crop_perc_trend + urban_levels + reserve, 
+                           data = df)
+
+mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |> 
+    mutate_if(is.numeric, round, 3) |> 
+    dplyr::filter(p.value < 0.1)
+
+mult_output
+```
+```{r}
+df$gmm_cluster <- relevel(df$gmm_cluster, ref = "low_med_minor_decline")
+
+multinom_model <- multinom(gmm_cluster ~ flp_area_trend + crop_perc_trend + urban_levels + reserve, 
+                           data = df)
+
+mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |> 
+    mutate_if(is.numeric, round, 3) |> 
+    dplyr::filter(p.value < 0.1)
+
+mult_output
+```
+
+```{r}
+df$gmm_cluster <- relevel(df$gmm_cluster, ref = "med_high_major_decline")
+
+multinom_model <- multinom(gmm_cluster ~ flp_area_trend + crop_perc_trend + urban_levels + reserve, 
+                           data = df)
+
+mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |> 
+    mutate_if(is.numeric, round, 3) |> 
+    dplyr::filter(p.value < 0.1)
+
+mult_output
+```
+
+```{r}
+df_summary <- df |> 
+    dplyr::select(groups, gmm_cluster, flp_area_trend, crop_perc_trend, urban_levels, reserve) |> 
+    group_by(gmm_cluster) |> 
+    summarise(
+        Total_length = n(),
+        Decreased_Flp_Area = paste0(round(mean(flp_area_trend == "decreased") * 100, 2), "%"),
+        Increased_Crop = paste0(round(mean(crop_perc_trend == "increased") * 100, 2), "%"),
+        Less_Developed_Urban = paste0(round(mean(urban_levels == "Less developed") * 100, 2), "%"),
+        Fast_Developing_Urban = paste0(round(mean(urban_levels == "Fast developing") * 100, 2), "%"),
+        Developed_Urban = paste0(round(mean(urban_levels == "Developed") * 100, 2), "%"),
+        Reserve_Y = paste0(round(mean(reserve == "Y") * 100, 2), "%"),
+        Groups_String = toString(groups),
+        # Groups_List = list(groups)
+      )
+```
+
+```{r}
+order <- c("no_presence", "low_subtle_increase", "low_med_minor_decline", "med_high_major_decline", "increasing_or_high")
+df_summary$gmm_cluster <- factor(df_summary$gmm_cluster, levels = order)
+df_summary <- df_summary[order(df_summary$gmm_cluster), ]
+df_summary
+
+df_summary_agg_vals$gmm_cluster <- factor(df_summary_agg_vals$gmm_cluster, levels = order)
+df_summary_agg_vals <- df_summary_agg_vals[order(df_summary_agg_vals$gmm_cluster), ]
+df_summary_agg_vals
+
+df_summary_sim <- df_summary |> 
+  left_join(df_summary_agg_vals, by = "gmm_cluster") |> 
+  select(!Groups_String)
+df_summary_sim
+```
+
+```{r}
+df_summary_full <- df_summary |> 
+  left_join(df_summary_agg_vals, by = "gmm_cluster")
+df_summary_full$Groups_String
+```

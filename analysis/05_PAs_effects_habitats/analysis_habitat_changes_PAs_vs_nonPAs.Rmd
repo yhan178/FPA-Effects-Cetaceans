@@ -1,0 +1,202 @@
+---
+title: "Analyzing initial habitat conditions between PAs and non-PAs"
+author: "Yi Han"  
+date: "2021-11-25"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: This file tests whether PAs had more river segments with 
+stable habitat conditions than the non-PAs. It generates statistical outputs 
+and produces Fig.5d-f in the main text.   
+
+It uses data in the files 'floodplain_area_regression_results.csv', 
+'cropland_perc_regression_results.csv', 'urban_cluster_results.csv' 
+in the 'trend_analysis_habitats' folder.  
+
+```{r include=FALSE}
+library(tidyverse)
+# library(fifer)
+```
+
+## 1. Examine if the PAs hold more river segments with stable floodplain area   
+
+__Prepare the dataframe:__ we grouped river segments into decreased and stable 
+categories given whether the floodplain area showed a significant decline. 
+We grouped the nine segments with a decreased floodplain area into the stable 
+category (see Appendix S3 for more details).  
+
+```{r}
+seg_wise_floodplain_df <- read.csv(file="../trend_analysis_habitats/floodplain_area_regression_results.csv")
+group_lvls <- seg_wise_floodplain_df$groups
+floodplain_df <- seg_wise_floodplain_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(flp_area_trend = case_when((p_value < 0.05 & slope < 0) ~ "decreased",
+                                TRUE ~ "stable")) %>%
+    mutate(flp_area_trend = factor(flp_area_trend, 
+                                    levels = c("stable", "decreased"))) %>%
+    mutate(reserve_without_nj = case_when(
+        group_levels %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+        TRUE ~ "N")) %>%
+    mutate(reserve_without_nj = as.factor(reserve_without_nj)) 
+head(floodplain_df, 5)
+```
+
+__Plot the number of river segments of the PA and non-PA groups at each category__ 
+__of the floodplain area trend.__ (Fig. 5d)   
+
+```{r}
+ggplot(floodplain_df, aes(x = reserve_without_nj, 
+                          color = flp_area_trend, fill=flp_area_trend)) +
+      geom_bar(stat = "count", width=0.6, position = position_dodge(), color="black") + 
+      scale_fill_manual(values = c("white", "grey50")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 80), breaks=seq(0, 80, 10)) +
+      scale_x_discrete(limits = c("Y", "N"),
+                       breaks = c("Y", "N"),
+                       labels = c("PAs", "non-PAs")) +
+      labs (x = "", y = "Segment counts") +
+      theme_classic(base_size = 14) +
+      theme(legend.position = c(.1, .99),
+            legend.justification = c("left", "top"),
+            legend.box.just = "left")
+```
+__Chi-square test__   
+
+```{r}
+tbl_flp_trend <- table(floodplain_df$flp_area_trend, floodplain_df$reserve_without_nj)
+tbl_flp_trend
+chisq.test(tbl_flp_trend)
+```
+The stable group actually contains 9 segments with increased floodplain areas, where
+8 from non-PAs and 1 from PAs. We now remove them for chi square analysis.
+
+```{r}
+tbl_flp_trend_remove_inc <- as.table(rbind(c(66, 39), c(23, 8)))
+dimnames(tbl_flp_trend_remove_inc) <- list(group = c("stable", "decreased"),
+                                           PA = c("N", "Y"))
+tbl_flp_trend_remove_inc
+chisq.test(tbl_flp_trend_remove_inc)
+```
+
+## 2. Examine if the PAs hold more river segments with stable cropland%   
+
+__Prepare the dataframe:__ we grouped river segments into increased and stable 
+categories given whether the cropland% showed a significant increase. We grouped 
+the four segments with an increased cropland% into the stable category 
+(see Appendix S3 for more details).  
+
+```{r}
+seg_wise_cropland_df <- read.csv(file="../trend_analysis_habitats/cropland_perc_regression_results.csv")
+cropland_df <- seg_wise_cropland_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(crop_perc_trend = case_when((p_value < 0.05 & slope > 0) ~ "increased",
+                             TRUE ~ "stable")) %>% 
+    mutate(crop_perc_trend = factor(crop_perc_trend, 
+                                    levels = c("stable", "increased"))) %>%
+    mutate(reserve_without_nj = case_when(
+        group_levels %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+        TRUE ~ "N")) %>%
+    mutate(reserve_without_nj = as.factor(reserve_without_nj)) 
+head(cropland_df, 5)
+```
+
+__Plot the number of river segments of the PA and non-PA groups at each category__ 
+__of the cropland% trend.__ (Fig. 5e)   
+
+```{r}
+ggplot(cropland_df, aes(x=reserve_without_nj, color=crop_perc_trend, fill=crop_perc_trend)) +
+      geom_bar(stat = "count", width=0.6, position = position_dodge(), color="black") + 
+      scale_fill_manual(values = c("white", "grey50")) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 80), breaks=seq(0, 80, 10)) +
+      scale_x_discrete(limits = c("Y", "N"),
+                       breaks = c("Y", "N"),
+                       labels = c("PAs", "non-PAs")) +
+      labs (x = "", y = "Segment counts") +
+      theme_classic(base_size = 14) +
+      theme(legend.position = c(.1, .99),
+            legend.justification = c("left", "top"),
+            legend.box.just = "left")
+```
+
+__Chi-square test__   
+
+```{r}
+tbl_crop_trend <- table(cropland_df$crop_perc_trend, cropland_df$reserve_without_nj)
+tbl_crop_trend
+chisq.test(tbl_crop_trend)
+```
+
+The stable group actually contains 4 segments with decreased cropland%, where
+all 4 from non-PAs. We now remove them for Chi square analysis.
+
+```{r}
+tbl_crop_trend_remove_dec <- as.table(rbind(c(62, 24), c(31, 24)))
+dimnames(tbl_crop_trend_remove_dec) <- list(group = c("stable", "increased"),
+                                           PA = c("N", "Y"))
+tbl_crop_trend_remove_dec 
+chisq.test(tbl_crop_trend_remove_dec)
+```
+
+## 3. Examine if the PAs hold more river segments with lower urban development level   
+
+__Prepare the dataframe:__ we grouped the “developed” and the “highly developed” 
+as one category as “developed”, representing those river segments with relatively 
+large urban% and large increment in urban% (see Appendix S3 for more details).   
+
+```{r}
+seg_wise_urban_df <- read.csv(file="../trend_analysis_habitats/urban_cluster_results.csv")
+
+urban_df <- seg_wise_urban_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    droplevels() %>%
+    mutate(urban_levels = case_when(
+       development_levels=="less-developed" ~ "Less developed",
+       development_levels=="fast-developing" ~ "Fast developing",
+       TRUE ~ "Developed")) %>%
+    mutate(urban_levels = factor(urban_levels, 
+       levels = c("Less developed", "Fast developing", "Developed"))) %>%
+    mutate(reserve_without_nj = case_when(
+        group_levels %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+        TRUE ~ "N")) %>%
+    mutate(reserve_without_nj = as.factor(reserve_without_nj)) 
+head(urban_df, 5)
+```
+
+__Plot the number of river segments of the PA and non-PA groups at each category__ 
+__of the urban development levels.__ (Fig. 5f)   
+
+```{r}
+ggplot(urban_df, aes(x=reserve_without_nj, color=urban_levels, fill=urban_levels)) + 
+    geom_bar(stat = "count", width=0.8, 
+             position=position_dodge(preserve = "single"), color="black") +
+    scale_fill_manual(values = c("white", "grey80", "grey30")) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 44), breaks=seq(0, 44, 10)) +
+    scale_x_discrete(limits = c("Y", "N"),
+                     breaks = c("Y", "N"),
+                     labels = c("PAs", "non-PAs")) +
+    labs (x = "", y = "Segment counts") +
+    theme_classic(base_size = 14) +
+    theme(legend.position = c(.1, .99),
+          legend.justification = c("left", "top"),
+          legend.box.just = "left")
+```
+
+__Chi-square test__   
+
+```{r}
+tbl_urban_trend <- table(urban_df$urban_levels, urban_df$reserve_without_nj)
+chisq.test(tbl_urban_trend)
+```
+
+__Post hoc pairwise comparisons__   
+
+Use the function `fisher.multcomp` in package `RVAideMemoire`.  
+
+```{r}
+library(RVAideMemoire)
+RVAideMemoire::fisher.multcomp(tbl_urban_trend, p.method = "bonferroni")
+```
+
+

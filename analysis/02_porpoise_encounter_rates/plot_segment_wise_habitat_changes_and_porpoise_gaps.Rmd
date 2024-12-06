@@ -1,0 +1,315 @@
+---
+title: "Plot segment-wise habitat changes and porpoise distribution gaps"
+author: "Yi Han"  
+date: "2021-11-26"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: Plot the segment-wise porpoise abundance changes, changing 
+trends of the floodplain area and cropland%, and urban development levels, which
+correspond to Fig. 2b.
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+## 1. Plot distribution gaps of the porpoise    
+
+We define a distribution gap of the porpoise as a river sections with extremely
+low porpoise abundance, i.e., < 0.05 porpoise per km, in both 2006 and 2017.   
+
+```{r}
+seg_wise_abund_df <- read.csv(file="../02_percentage_coverage_of_PAs/segment_wise_porpoise_abundance.csv")
+head(seg_wise_abund_df, 5)
+```
+
+```{r}
+group_levels <- seg_wise_abund_df$groups[1:150]
+abund_df <- seg_wise_abund_df %>%
+    dplyr::select(groups, year, segment_mean) %>%
+    dplyr::mutate(groups = factor(groups, levels=group_levels)) %>%
+    dplyr::mutate(group_levels = as.numeric(groups)) %>%
+    tidyr::pivot_wider(., names_from = year, values_from = segment_mean) %>%
+    dplyr::rename(abund_06 = "2006", abund_17 = "2017") %>%
+    dplyr::mutate(abund_change = abund_17 - abund_06) %>%
+    dplyr::filter(group_levels <= 145)
+head(abund_df, 5)
+```
+
+```{r}
+abund_df <- abund_df %>%
+    mutate(dist_gap = case_when((abund_06 < 0.05 & abund_17 < 0.05) ~ "perm_gap", 
+                                (abund_06 >= 0.05 & abund_17 < 0.05) ~ "new_gap",
+                                (abund_06 <= abund_17 & abund_17 >= 0.2) ~ "steady-recover",
+                                (abund_06 >= 0.2 & abund_17 >= 0.2) ~ "consist high",
+                                TRUE ~ "non-gap-non-high")) %>%
+    mutate(dist_gap = factor(dist_gap, levels = c("perm_gap", "new_gap", "non-gap-non-high", "consist high", "steady-recover")))
+head(abund_df, 5)
+```
+
+__Plot the distribution gaps__  
+
+```{r} 
+abund_gap_plot <- ggplot(abund_df, aes(x=group_levels, y=1, 
+                                       color=dist_gap, fill=dist_gap)) +
+    geom_point(shape=15, size=5)+
+    scale_color_manual(values = c("black", "grey30", "grey65", "grey80", "grey95")) +
+    scale_fill_manual(values = c("black", "grey30", "grey65", "grey80", "grey95")) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 145), breaks=seq(0, 145, 5),
+                       labels = seq(0, 1450, 50)) +
+    scale_y_continuous(expand = c(0, 1), limits = NULL, breaks = NULL) +
+    labs(x = "Distance from Yichang (km)",
+         y = "Porpoise distribution") +
+    guides(fill=guide_legend(""), color=guide_legend("")) +
+    theme_classic(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+abund_gap_plot
+```
+
+__Plot the segment-wise abundance changes__   
+
+```{r}
+pos_df <- abund_df %>%
+  dplyr::select(abund_change, group_levels) %>%
+  mutate(category = "positive") %>%
+  mutate(seg_abund = case_when(abund_change < 0 ~ 0,
+                             TRUE ~ abund_change))
+  
+neg_df <- abund_df %>%
+  dplyr::select(abund_change, group_levels) %>%
+  mutate(category = "negative") %>%
+  mutate(seg_abund = case_when(abund_change >= 0 ~ 0,
+                             TRUE ~ abund_change)) 
+
+comb_df <- bind_rows(pos_df, neg_df) %>%
+  mutate(category=as.factor(category))
+
+head(comb_df, 5)
+```
+
+```{r}
+ggplot(comb_df, aes(x=group_levels, y=seg_abund, fill=category))+
+    geom_area(linewidth = 1) + 
+    scale_fill_manual(values = c("goldenrod3", "skyblue3")) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 145), breaks=seq(0, 145, 5),
+                       labels = seq(0, 1450, 50)) +
+    labs(x = "Distance from Yichang (km)") +
+    theme_classic(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+
+```
+
+
+
+## 2. Plot the segment-wise changing trend of the floodplain area  
+
+We grouped river segments into decreased and stable categories given whether 
+the floodplain area showed a significant decline. We grouped the nine segments 
+with a decreased floodplain area into the stable category (see Appendix S3 for 
+more details).  
+
+```{r}
+seg_wise_floodplain_df <- read.csv(file="floodplain_area_regression_results.csv")
+head(seg_wise_floodplain_df, 5)
+```
+
+```{r}
+group_lvls <- seg_wise_floodplain_df$groups
+floodplain_df <- seg_wise_floodplain_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(flp_area_trend = case_when((p_value < 0.05 & slope < 0) ~ "decreased",
+                                TRUE ~ "stable")) %>%
+    mutate(flp_area_trend = factor(flp_area_trend, 
+                                    levels = c("decreased", "stable"))) 
+head(floodplain_df, 5)
+```
+
+```{r}
+floodplain_plot <- ggplot(floodplain_df, aes(
+        x=group_levels, y=1, color=flp_area_trend, fill=flp_area_trend)) +
+    geom_point(shape=22, size=5)+
+    scale_color_manual(values = c("black", "grey80"))+
+    scale_fill_manual(values = c("black", "grey80")) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 145), breaks=seq(0, 145, 5),
+                       labels = seq(0, 1450, 50)) +
+    scale_y_continuous(expand = c(0, 1), limits = NULL, breaks = NULL) +
+    labs(x = "Distance from Yichang (km)",
+         y = "Floodplain area trend") +
+    guides(fill=guide_legend(""), color=guide_legend("")) +
+    theme_classic(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+
+floodplain_plot
+```
+
+## 3. Plot the segment-wise changing trend of the cropland%    
+
+We grouped river segments into increased and stable categories given whether 
+the cropland% showed a significant increase. We grouped the four segments 
+with an increased cropland% into the stable category (see Appendix S3 for 
+more details).  
+
+```{r}
+seg_wise_cropland_df <- read.csv(file="cropland_perc_regression_results.csv")
+head(seg_wise_cropland_df, 5)
+```
+
+
+```{r}
+cropland_df <- seg_wise_cropland_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    mutate(crop_perc_trend = case_when((p_value < 0.05 & slope > 0) ~ "increased",
+                             TRUE ~ "stable")) %>% 
+    mutate(crop_perc_trend = factor(crop_perc_trend, 
+                                    levels = c("increased", "stable"))) 
+head(cropland_df, 5)
+```
+
+```{r}
+cropland_plot <- ggplot(cropland_df , aes(
+        x=group_levels, y=1, color=crop_perc_trend, fill=crop_perc_trend)) +
+    geom_point(shape=22, size=5)+
+    scale_color_manual(values = c("black", "grey80"))+
+    scale_fill_manual(values = c("black", "grey80")) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 145), breaks=seq(0, 145, 5),
+                       labels = seq(0, 1450, 50)) +
+    scale_y_continuous(expand = c(0, 1), limits = NULL, breaks = NULL) +
+    labs(x = "Distance from Yichang (km)",
+         y = "Cropland% trend") +
+    guides(fill=guide_legend(""), color=guide_legend("")) +
+    theme_classic(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+cropland_plot 
+```
+## 4. Plot the segment-wise urban development levels     
+
+We grouped the “developed” and the “highly developed” as one category as 
+“developed”, representing those river segments with relatively large urban% 
+and large increment in urban% (see Appendix S3 for more details).  
+
+```{r}
+seg_wise_urban_df <- read.csv(file="urban_cluster_results.csv")
+head(seg_wise_urban_df, 5)
+```
+
+
+```{r}
+urban_df <- seg_wise_urban_df %>%
+    mutate(groups = factor(groups, levels=group_lvls)) %>%
+    mutate(group_levels = as.numeric(groups)) %>%
+    filter(group_levels <= 145) %>%
+    droplevels() %>%
+    mutate(urban_levels = case_when(
+       development_levels=="less-developed" ~ "Less developed",
+       development_levels=="fast-developing" ~ "Fast developing",
+       TRUE ~ "Developed")) %>%
+    mutate(urban_levels = factor(urban_levels, 
+       levels = c("Developed", "Fast developing", "Less developed")))
+head(urban_df, 5)
+```
+
+
+```{r}
+urban_plot <- ggplot(urban_df, aes(
+        x=group_levels, y=1, color=urban_levels, fill=urban_levels)) +
+    geom_point(shape=22, size=5)+
+    scale_color_manual(values = c("black", "grey50", "grey80"))+
+    scale_fill_manual(values = c("black", "grey50", "grey80")) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 145), breaks=seq(0, 145, 5),
+                       labels = seq(0, 1450, 50)) +
+    scale_y_continuous(expand = c(0, 1), limits = NULL, breaks = NULL) +
+    labs(x = "Distance from Yichang (km)",
+         y = "Urban development") +
+    guides(fill=guide_legend(""), color=guide_legend("")) +
+    theme_classic(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+
+urban_plot
+```
+
+```{r}
+gap_shishou <- c(4: 27)
+recover_jjm <- c(28: 53)
+gap_wuhan <- c(54: 66)
+continue_large <- c(67: 110)
+new_gap_tongling <- c(111: 115)
+steady_nanjing <- c(116: 133)
+new_gap2 <- c(134: 139)
+continue_zhenjiang <- c(140: 144)
+
+feature_list <- list(gap_shishou, recover_jjm, gap_wuhan, continue_large,
+                  new_gap_tongling, steady_nanjing, new_gap2, continue_zhenjiang)
+```
+
+
+```{r}
+library("scales")
+
+flp_perc_list <- list()
+
+for (i in 1: length(feature_list)) {
+    flp_perc_list[[i]] <- floodplain_df %>% 
+                          filter(group_levels %in% feature_list[[i]]) %>% 
+                          pull(flp_area_trend) %>% 
+                          summary()
+}
+
+flp_perc_df <- as.data.frame(do.call(rbind, flp_perc_list)) %>%
+    mutate(decrease_perc = scales::percent(decreased/(decreased + stable)))
+flp_perc_df
+```
+
+```{r}
+crop_perc_list <- list()
+
+for (i in 1: length(feature_list)) {
+    crop_perc_list[[i]] <- cropland_df %>% 
+                          filter(group_levels %in% feature_list[[i]]) %>% 
+                          pull(crop_perc_trend) %>% 
+                          summary()
+}
+
+crop_perc_df <- as.data.frame(do.call(rbind, crop_perc_list)) %>%
+    mutate(increase_perc = scales::percent(increased/(increased + stable)))
+crop_perc_df
+```
+
+
+```{r}
+urban_perc_list <- list()
+
+for (i in 1: length(feature_list)) {
+    urban_perc_list[[i]] <- urban_df %>% 
+                          filter(group_levels %in% feature_list[[i]]) %>% 
+                          pull(urban_levels) %>% 
+                          summary()
+}
+
+urban_perc_df <- as.data.frame(do.call(rbind, urban_perc_list))
+colnames(urban_perc_df) <- c("developed", "fast_dev", "less_dev")
+
+urban_perc_df <- urban_perc_df %>%
+    mutate(developed_perc = scales::percent(developed/(developed + fast_dev + less_dev))) %>%
+    mutate(fast_dev_perc = scales::percent(fast_dev/(developed + fast_dev + less_dev))) %>%
+    mutate(less_dev_perc = scales::percent(less_dev/(developed + fast_dev + less_dev)))
+
+urban_perc_df
+```
+

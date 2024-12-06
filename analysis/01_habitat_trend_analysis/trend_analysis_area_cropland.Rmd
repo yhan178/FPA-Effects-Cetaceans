@@ -1,0 +1,158 @@
+---
+title: "Examining changing trends of the segment-wise floodplain area and cropland%"
+author: "Yi Han"  
+date: "2021-11-20"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: The file examines the changes of the floodplain area and the 
+cropland% for each of segments from 2001 to 2016. The results are shown in Table S1.  
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+## 1. Prepare the data  
+
+__Get the segment-wise floodplain area and cropland% data ready.__  
+
+We excluded the last 50 km-long river section, i.e., the last 5 segments within 
+[1450 km, 1500 km) from the following trend analyses because this region is 
+close to the estuary, where tidal effects also contribute substantially to 
+the variation of the floodplain area.  
+
+```{r}
+seg_floodplain_cropland_df <- read.csv(file="../../data/processed/seg_wise_floodplain_ndvi.csv")
+str(seg_floodplain_cropland_df)
+```
+
+```{r, message=FALSE}
+groups_levels <- seg_floodplain_cropland_df %>% filter(year==2003) %>% pull(groups)
+seg_floodplain_cropland_df <- seg_floodplain_cropland_df %>%
+    mutate(f_year = as.factor(f_year)) %>%
+    mutate(groups = factor(groups, levels=groups_levels)) %>% # get the group levels right
+    filter(f_group <= 145) %>%
+    droplevels()
+str(seg_floodplain_cropland_df)
+```
+
+## 1. Linear regression of the floodplain area  
+
+__Linear regression of the floodplain area for each segment.__  
+
+```{r}
+len <- length(levels(seg_floodplain_cropland_df$groups))
+coef_floodplain_trend_list <- list()
+
+for (i in 1:len) {
+    # i=27
+    groupi <- levels(seg_floodplain_cropland_df$groups)[i]
+    
+    segment_i <- seg_floodplain_cropland_df %>%
+        dplyr::filter(groups %in% groupi) 
+    
+    lin_modi <- lm(seg_floodplain_area * 10 ~ year, data = segment_i)
+        # seg_floodplain_area is the flooplain area per 1 km for the segment
+        # thus, to get the total area of the floodplain need to mltiply 
+        # seg_floodplain_area by 10.
+    
+    p_vali <- summary(lin_modi)$coefficients[2, 4] %>% round(., digits = 3)
+    r_squaredi <- summary(lin_modi)$r.squared %>% round(., digits = 3)
+    slopei <- summary(lin_modi)$coefficients[2, 1] %>% round(., digits = 3)
+    
+    if(p_vali <= 0.01){
+        p_catei <- "<0.01"
+      
+    } else if(p_vali > 0.01 & p_vali <=0.05){
+        p_catei <- "<0.05"
+  
+    } else {
+        p_catei <- as.character(round(p_vali, digit = 3))
+    }
+    
+    coef_floodplain_trend_list[[i]] <- c(groupi, p_vali, p_catei, r_squaredi, slopei)
+}
+
+# coef_floodplain_trend_list
+```
+
+__Save the results of the lienar regression as a dataframe.__  
+
+```{r}
+coef_floodplain_df <- do.call(rbind.data.frame, coef_floodplain_trend_list)
+colnames(coef_floodplain_df) <- c("groups", "p_value", "p_category", "r_squared", "slope")
+
+coef_floodplain_df <- coef_floodplain_df %>%
+    dplyr::mutate(p_value = as.numeric(as.character(p_value)),
+                  r_squared = as.numeric(as.character(r_squared)),
+                  slope = as.numeric(as.character(slope)))
+head(coef_floodplain_df, 5)
+```
+
+__Save the dataframe as a csv file. (Table S1)__
+```{r}
+# write.csv(df_urban_incre_kmean, 
+#           file = "../../data/analysis_outputs/trend_analysis/floodplain_area_regression_results.csv", 
+#           row.names = FALSE)
+```
+
+## 3. Linear regression of the cropland%  
+
+__Linear regression of the cropland% for each segment.__   
+
+Cropland%, as proportions (range from 0 to 1), is arcsine transformed in linear regression.
+
+```{r}
+len <- length(levels(seg_floodplain_cropland_df$groups))
+coef_crop_perc_list <- list()
+
+for (i in 1:len) {
+    # i=19
+    groupi <- levels(seg_floodplain_cropland_df$groups)[i]
+    
+    segment_i <- seg_floodplain_cropland_df %>%
+        dplyr::filter(groups %in% groupi) 
+    
+    segment_i$asin_cropland_perc <- asin(sqrt(segment_i$seg_cropland_perc))
+    crop_perc_modi <- lm(asin_cropland_perc ~ year, data=segment_i)
+    
+    p_vali <- summary(crop_perc_modi)$coefficients[2, 4] %>% round(., digits = 3)
+    r_squaredi <- summary(crop_perc_modi)$r.squared %>% round(., digits = 3)
+    slopei <- summary(crop_perc_modi)$coefficients[2, 1] %>% round(., digits = 3)
+    
+    if(p_vali <= 0.01){
+        p_catei <- "<0.01"
+      
+    } else if(p_vali > 0.01 & p_vali <=0.05){
+        p_catei <- "<0.05"
+      
+    } else {
+        p_catei <- as.character(round(p_vali, digit = 3))
+    }
+    
+    coef_crop_perc_list[[i]] <- c(groupi, p_vali, p_catei, r_squaredi, slopei)
+}
+```
+
+__Save the results of the linear regression as a dataframe and a csv file (Table S1).__  
+
+```{r}
+coef_crop_perc_df <- do.call(rbind.data.frame, coef_crop_perc_list)
+colnames(coef_crop_perc_df) <- c("groups", "p_value", "p_cate", "r_squared", "slope")
+coef_crop_perc_df <- coef_crop_perc_df %>%
+    dplyr::mutate(p_value = as.numeric(as.character(p_value)),
+                  r_squared = as.numeric(as.character(r_squared)),
+                  slope = as.numeric(as.character(slope)))
+str(coef_crop_perc_df)
+head(coef_crop_perc_df, 5)
+```
+
+__Save the results as a csv file (see Table S1)__
+
+```{r}
+# write.csv(df_urban_incre_kmean, 
+#           file = "../../data/analysis_outputs/trend_analysis/cropland_perc_regression_results.csv", 
+#           row.names = FALSE)
+```
+
+

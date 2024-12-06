@@ -1,0 +1,172 @@
+---
+title: "Analysis_river_lengths_against_abund_ranks"  
+author: "Yi Han"  
+date: "2021-11-22"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: The following code aims to (1) summarize lengths of the protected 
+and non-protected river segments corresponding to each porpoise abundance rank in 
+2006 and 2017  respectively, (2) plot the summarized results as shown in Fig.3 in 
+the main text.
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+## 1. Data preparation  
+### 1.1 Calculate 10 km-segment-wise porpoise abundance.  
+```{r message = FALSE}
+# Load the porpoise abundance data calculated for each 1 km segment.
+df_mov_aver <- read.csv(file="../01_porpoise_encounter_rates/yfp_moving_average_06_17.csv")
+
+binwidth = 10
+
+df_seg_mean <- df_mov_aver %>%
+    mutate(., groups=cut(x = DistMark,
+                         breaks=seq(from=0, to=1500, by = binwidth),
+                         dig.lab=5, right = FALSE)) %>%
+    group_by(f_year, year, groups, .drop=FALSE) %>%
+    summarise(segment_mean = mean(mov_aver)) %>%
+    ungroup()
+head(df_seg_mean, 5)
+```
+
+### 1.2 Assign each bin with the protection status.  
+Based on the location and range of the six reserves, we hard code the protection
+status for each segment of each survey.  
+- The variable _reserve_ specifies whether the segment is located in a reserve in 2017.    
+- The variable _reserve_name_ specifies the name of the reserve that the segment 
+belongs to, a non-reserve segment is named as 'non-PAs'.  
+- The variable _reserve_without_nj_ identifies whether the segment is located in 
+a reserve before 2006, segments belongs to the Nanjing reserve, [1261, 1308] 
+are identified as 'non-PAs' as the reserve was established in 2014.  
+
+```{r message = FALSE}
+year_list = c(2006, 2017)
+data_seg_mean_list = list()
+
+for (i in 1:2){
+    data_seg_mean <- df_seg_mean %>%
+        filter(year==year_list[i]) %>%
+        dplyr:: mutate(group_level = c(1:150)) %>%
+        mutate(reserve = case_when(group_level %in% c(22:30, 41:53, 88:104, 110:115, 127:131, 139:141) ~ "Y",
+                                   TRUE ~ "N")) %>%
+        mutate(reserve_name = case_when(group_level %in% c(22:30) ~ "shishou",
+                                         group_level %in% c(41:53) ~ "honghu",
+                                         group_level %in% c(88:104) ~ "anqing",
+                                         group_level %in% c(110:115) ~ "tongling",
+                                         group_level %in% c(127:131) ~ "nanjing",
+                                         group_level %in% c(139:141) ~ "zhenjiang",
+                                         TRUE ~ "non-PAs")) %>%
+        mutate(reserve_without_nj = case_when(group_level %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+                                       TRUE ~ "N")) %>%
+        mutate(reserve = as.factor(reserve),
+               reserve_name = as.factor(reserve_name),
+               reserve_without_nj = as.factor(reserve_without_nj)) 
+    data_seg_mean_list[[i]] <- data_seg_mean
+}
+
+```
+
+### 1.3 Plot data to check if the segmentation was performed correctly.
+```{r}
+# with(data_seg_mean_list[[1]], plot(group_level, segment_mean, 
+#      type="l", lwd=3, xlab="Distance", ylab="Encounter rate"), 
+#      axis(side = 1, at = seq(0, 1585, by = 100), tcl = -0.2))
+# 
+# with(data_seg_mean_list[[2]], plot(group_level, segment_mean, 
+#      type="l", lwd=3, xlab="Distance", ylab="Encounter rate"), 
+#      axis(side = 1, at = seq(0, 1585, by = 100), tcl = -0.2))
+```
+
+### 1.4 Add abundance ranks  
+Ranks and thresholds:   
+    (1) extremely low abundance: < 0.05 porpoise km-1,  
+    (2) low abundance:  ≥ 0.05 porpoise km-1 and < 0.1 porpoise km-1,  
+    (3) medium abundance: ≥ 0.1 porpoise km-1 and < 0.2 porpoise km-1,  
+    (4) high abundance with encounter rates of ≥ 0.20 porpoise km-1.  
+    
+```{r message = FALSE}
+# Abundance rank data for 2006, when Nanjing is not a reserve
+data_06_ranks <- data_seg_mean_list[[1]] %>% 
+    mutate(., abund_ranks =cut(segment_mean, 
+                        breaks=c(0, 0.05, 0.1, 0.2, 1), 
+                        dig.lab=5, right = FALSE)) %>%
+    select(groups, f_year, year, abund_ranks, segment_mean, reserve, reserve_without_nj) %>%
+    # rename(reserve = reserve_without_nj) %>%  # Nanjing is not a reserve in 2006
+    # mutate(reserve = as.factor(reserve)) %>%
+    mutate(f_year = as.factor(f_year))
+
+# Abundance rank data for 2017, when Nanjing reserve has been established
+data_17_ranks <- data_seg_mean_list[[2]] %>%
+    mutate(., abund_ranks =cut(segment_mean, 
+                               breaks=c(0, 0.05, 0.1, 0.2, 1), 
+                               dig.lab=5, right = FALSE)) %>%
+    select(groups, f_year, year, abund_ranks, segment_mean, reserve, reserve_without_nj) %>%
+    mutate(f_year = as.factor(f_year))
+
+# combine above two data frame
+data_abund_ranks <- bind_rows(data_06_ranks, data_17_ranks) %>% droplevels()
+
+# write the dataframe as a csv file for later analysis on the PAs' effects on the porpoise abundance.
+# write.csv(data_abund_ranks, file = "segment_wise_porpoise_abundance.csv", row.names = FALSE)
+```
+
+## 2. Data analysis  
+### 2.1 Summarize data   
+__Summarize the river lengths by year, abundance ranks.__   
+```{r message = FALSE}
+data_abund_ranks %>% 
+  group_by(abund_ranks, f_year) %>%
+  summarise(length = n()*10)
+```
+__Summarize the river lengths by year, abundance ranks, and protected status.__  
+```{r message = FALSE}
+data_abund_ranks %>% 
+  group_by(abund_ranks, f_year, reserve) %>%
+  summarise(length = n()*10)
+
+data_abund_ranks %>% 
+  group_by(abund_ranks, f_year, reserve_without_nj) %>%
+  summarise(length = n()*10)
+```
+
+### 2.2 Plot the summarized data  
+A quick plot of the river lengths by year, abundance ranks, and protected status.  
+```{r}
+# ggplot(data_abund_ranks, aes(x = f_year, group=reserve, fill=reserve)) +
+#     geom_bar(stat = "count", position = position_stack()) +
+#     facet_wrap(~abund_ranks, ncol=5)
+```
+
+The following code generates Fig. 3 in the main text.    
+```{r}
+# For better plotting, assigning new categories to the dataframe.
+data_abund_ranks_plot <- data_abund_ranks %>%
+    mutate(year_reserve = case_when(f_year=="2006" & reserve=="N" ~ "07N",
+                                    f_year=="2006" & reserve=="Y" ~ "07Y",
+                                    f_year=="2017" & reserve=="N" ~ "17N",
+                                    f_year=="2017" & reserve=="Y" ~ "17Y")) %>%
+    mutate(year_reserve = factor(year_reserve, levels = c("07N", "07Y", "17N", "17Y")))
+
+ggplot(data_abund_ranks_plot, aes(x = f_year, group=year_reserve, 
+                                  color = year_reserve, fill=year_reserve)) +
+    geom_bar(stat = "count", width = 1, position = position_stack(), color="black") +
+    facet_grid(~abund_ranks) +
+    scale_fill_manual(values = c("white", "grey95", "grey58", "grey50")) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 65), breaks=seq(0, 65, 10)) +
+    scale_x_discrete(limits = c("trt99", "2006", "2017", "trt99"),
+                     breaks = c(NA, "2006", "2017", NA),
+                     labels = c("", "2006", "2017", "" )) +
+    labs (x = "Abundance ranks",
+          y = "Segment counts") +
+    theme_classic(base_size = 14) +
+    theme(strip.text = element_blank(),
+          panel.spacing = grid::unit(-2, "lines"),
+          axis.text.x = element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+```

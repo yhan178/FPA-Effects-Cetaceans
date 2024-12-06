@@ -1,0 +1,173 @@
+---
+title: "Calculate porpoise encounter rates"
+author: "Yi Han"  
+date: "2021-10-29"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: # This file (1) calculate the moving average of the encounter 
+rates of the Yangtze finless porpoise, the data frame was saved for later analyses
+(2) plot the moving average of the encounter rates, which correspond to Fig 2a.  
+
+```{r include=FALSE}
+library(tidyverse)
+library(zoo)
+```
+
+
+## 1. Data preparation  
+__Read and clean the data file of the sighting records of the porpoise.__  
+
+```{r}
+yfp <- read.csv("yfp_sightings_06_17.csv")
+yfp <- yfp %>% mutate(., f_year=as.factor(year))
+head(yfp, 5)
+```
+```{r}
+yfp_locations <- ggplot(yfp, aes(x=DistMark, y=size, colour = f_year)) +
+    geom_point(shape=21, size=1.5, stroke=0.5, alpha=0.8) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 1500), breaks=seq(0, 1500, 50)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 16), breaks=seq(0, 16, 2)) +
+    facet_wrap(~f_year, nrow = 2, scales = "free_x") + 
+    guides(fill=guide_legend(title="Year"), color=guide_legend(title="Year")) +
+    labs (x = "Distance from Yichang (km) ",
+          y = "Number of porpoise per 1 km") +
+    theme_classic(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right",
+          strip.text = element_blank(),
+          strip.background = element_blank())
+yfp_locations
+```
+
+__Summarize number of individuals sighted per 1 km for each survey.__  
+
+```{r}
+list_data <- list()
+year_list <- c(2006, 2017)
+
+for (i in 1:2){
+    data <- yfp %>% 
+        dplyr::filter(year==year_list[i]) %>%
+        dplyr::group_by(DistMark) %>%
+        dplyr::summarise(sum_size = sum(size)/4) %>% # the sighting records were 
+            # summarized from two survey boats and return trips, thus the number 
+            # need to be divided by four
+        dplyr::ungroup() %>%
+        dplyr::mutate(year=year_list[i])
+    list_data[[i]] <- data
+}
+
+yfp_sum_1km <- bind_rows(list_data[[1]], list_data[[2]]) %>% rename(size = sum_size)
+
+head(yfp_sum_1km, 5)
+```
+
+## 2. Calculating moving average  
+
+__Create a new data frame storing the results of moving average: df_mov_aver.__   
+
+```{r}
+df_mov_aver <- data.frame(
+    DistMark = rep(c(0: 1585), 2),
+    year = rep(c(2006, 2017), each= 1586),
+    f_year = rep(c("2006", "2017"), each = 1586)) %>%
+    dplyr::mutate(f_year = as.factor(f_year))
+```
+
+__Join the dataframe that summarize number of individuals sighted per 1km to__
+__the new dataframe by__ `DistMark` __and__ `year`.  
+
+```{r}
+df_mov_aver <- df_mov_aver %>% 
+    left_join(., yfp_sum_1km, by = c("DistMark", "year")) %>%
+    mutate_at(vars(size), ~replace(., is.na(.), 0)) 
+      # the 1-km-long segments with no porpoise sightings will yield NAs
+      # replace NAs after the join
+```
+
+__Calculate moving average encounter rates using a 50-km window size__
+__using the__ `rollapply` __function from the package__ `zoo`.      
+
+```{r}
+list_mov_aver <- list()
+
+for (i in 1:2){
+   data_mov_aver <- df_mov_aver %>%
+     filter(year==year_list[i]) %>%
+     mutate(mov_aver = rollapply(size, 50, mean, align=c("center"), fill=NA)) %>%
+     filter(DistMark < 1500) %>% # we focus on the 1500 km long river section within [0, 1500)
+     mutate(reserve = case_when(DistMark %in% c(209:296, 401: 532, 872:1044, 1088:1147, 1261:1308, 1381:1409) ~ "Y",
+                                TRUE ~ "N")) %>%
+        # the segments that are identified as reserves
+     mutate(reserve_name = case_when(DistMark %in% c(209:296) ~ "shishou",
+                                      DistMark %in% c(401: 532) ~ "honghu",
+                                      DistMark %in% c(872:1044) ~ "anqing",
+                                      DistMark %in% c(1088:1147) ~ "tongling",
+                                      DistMark %in% c(1261:1308) ~ "nanjing",
+                                      DistMark %in% c(1381:1409) ~ "zhenjiang",
+                                      TRUE ~ "non-PAs")) %>%
+        # reserve names
+     mutate(reserve_without_nj = case_when(DistMark %in% c(209:296, 401: 532, 872:1044, 1088:1147, 1381:1409) ~ "Y",
+                                    TRUE ~ "N")) 
+        # the segments that are identified as reserves before 2006, Nanjing (1261:1308) was excluded
+        # as it was established in 2014
+     list_mov_aver[[i]] <- data_mov_aver
+}
+```
+
+
+__Using a simple average to calculate the encounter rates for points at the end__
+__of the river section, i.e., [0, 23].__  
+
+```{r}
+# We calculate these values manually, and hard code it into above data frame
+
+# In the year 2006, there was no porpoise sighted within [0, 160], therefore, NAs 
+    # in the interval [0, 23] can be easily replaced by 0s.
+list_mov_aver[[1]] <- list_mov_aver[[1]] %>%
+      mutate_at(vars(mov_aver), ~replace(., is.na(.), 0))
+
+# In 2017, for the interval [0, 49], the following segments hold porpoises:
+    # DistMark = 1, i.e., interval [1, 2), porpoise size = 2, 
+    # DistMark = 3, i.e., interval [3, 4), porpoise size = 2, 
+    # DistMark = 12, i.e., interval [12, 13), porpoise size = 0.5, 
+    # DistMark = 14, i.e., interval [14, 15), porpoise size = 0.25.
+# Thus, the simple average of the interval [0, 23] all equal to (2 + 2 + 0.5 + 0.25)/50 = 0.095
+list_mov_aver[[2]] <- list_mov_aver[[2]] %>%
+      mutate_at(vars(mov_aver), ~replace(., is.na(.), 0.095)) 
+```
+
+__Write the dataframe as a csv file for later analysis.__  
+
+```{r}
+data_mov_aver <- bind_rows(list_mov_aver[[1]], list_mov_aver[[2]])
+
+# write.csv(data_mov_aver, file = "yfp_moving_average_06_17.csv", row.names = FALSE)
+```
+
+## 3. Plot results of moving average  
+__The following figure corresponds to Fig.2a in the main text.__
+
+```{r}
+ggplot(data_mov_aver, aes(x=DistMark, y=mov_aver, colour = f_year)) +
+    geom_line(linewidth = 1, alpha = 0.5) +
+    geom_area(aes(fill = f_year, group = f_year),
+              alpha = 0.5, position = 'identity') + # you want them overlapping, 
+      #so we need to specify position = 'identity'.
+    scale_fill_manual(values = c("skyblue3", "goldenrod3")) +
+    scale_color_manual(values = c("skyblue4", "goldenrod4" )) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 1500), breaks=seq(0, 1500, 50)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 0.9), breaks=seq(0, 0.8, 0.2)) +
+    labs (x = "Distance from Yichang (km) ",
+          y = "Encounter rate (porpoises / km)") +
+    guides(fill=guide_legend(title="Year"), color=guide_legend(title="Year")) +
+    theme_classic(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+```
+

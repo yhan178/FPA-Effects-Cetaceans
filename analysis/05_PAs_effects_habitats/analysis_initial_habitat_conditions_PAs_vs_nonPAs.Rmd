@@ -1,0 +1,194 @@
+---
+title: "Analyzing initial habitat conditions between PAs and non-PAs"
+author: "Yi Han"  
+date: "2021-11-25"
+output: html_notebook
+---
+**Email**: yi.han.178@gmail.com  
+**Description**: The following code aims to test whether the PAs had better 
+initial habitat conditions than the non-PAs: including larger floodplain area, and
+smaller human disturbances which reflected by smaller cropland% and urban%. The
+results of this analysis correspond to Fig 5 a-c.
+
+```{r include=FALSE}
+library(tidyverse)
+library(gghalves)
+```
+
+## 1. Compare initial floodplain area and cropland% between PAs and non-PAs  
+We used the mean floodplain area, mean cropland%, and mean urban% of the period 
+from 2001 to 2006 to represent the initial floodplain habitat conditions. 
+
+```{r}
+seg_floodplain_cropland_df <- read.csv(file="../data_preparation/seg_wise_floodplain_ndvi.csv")
+str(seg_floodplain_cropland_df)
+```
+
+### 1.1 Prepare the dataframe and add reserve information  
+(1) reserve: the segments that are identified as reserves in 2017   
+(2) reserve_without_nj: the segments that are identified as reserves before 2006, 
+    Nanjing (1261:1308) was excluded as it was established in 2014   
+(3) reserve_names: the name of the reserve   
+
+```{r, message=FALSE}
+groups_levels <- seg_floodplain_cropland_df %>% filter(year==2003) %>% pull(groups)
+floodplain_initial_df <- seg_floodplain_cropland_df %>%
+    mutate(f_year = as.factor(f_year),
+           groups = factor(groups, levels=groups_levels)) %>% # get the group levels right
+    filter(year <= 2006) %>%
+    dplyr::group_by(groups, f_group) %>%
+    dplyr::summarise(initial_floodplain = mean(seg_floodplain_area),
+                     initial_crop = mean(seg_ndvi_5_7),
+                     initial_crop_perc = mean(seg_cropland_perc)) %>%
+    mutate(reserve = case_when(f_group %in% c(22:30, 41:53, 88:104, 110:115, 127:131, 139:141) ~ "Y",
+                               TRUE ~ "N")) %>%
+    mutate(reserve_without_nj = case_when(f_group %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+                                          TRUE ~ "N")) %>%
+    mutate(reserve_name = case_when(f_group %in% c(22:30) ~ "shishou",
+                                    f_group %in% c(41:53) ~ "honghu",
+                                    f_group %in% c(88:104) ~ "anqing",
+                                    f_group %in% c(110:115) ~ "tongling",
+                                    f_group %in% c(127:131) ~ "nanjing",
+                                    f_group %in% c(139:141) ~ "zhenjiang",
+                                    TRUE ~ "non-PAs")) %>%
+    mutate(reserve = as.factor(reserve),
+           reserve_without_nj = as.factor(reserve_without_nj),
+           reserve_name = as.factor(reserve_name)) %>%
+    ungroup()
+str(floodplain_initial_df)
+```
+
+### 1.2 Compare the initial floodplain areas between the PAs and non-PAs  
+__Plot the initial floodplain areas between the PAs and non-PAs__  
+```{r}
+ggplot(floodplain_initial_df, aes(x = reserve_without_nj, y = initial_floodplain)) +
+    geom_half_boxplot(fill="grey70")+
+    geom_half_point(color="grey30")+
+    scale_y_continuous(limits = c(0, 0.8), breaks=seq(0, 0.8, 0.1)) +
+    scale_x_discrete(limits = c("Y", "N"),
+                     breaks = c("Y", "N"),
+                     labels = c("PAs", "non-PAs")) +
+    labs (x = "", y = expression(paste("Floodplain area (km"^"2", ") km"^" -1"))) +
+    theme_classic(base_size = 14) +
+    theme(legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+```
+__Compare the initial floodplain areas between the PAs and non-PAs using the Mann–Whitney U test__  
+```{r}
+floodplain_initial_PAs <- floodplain_initial_df %>% 
+    filter(reserve_without_nj=="Y") %>% pull(initial_floodplain)
+floodplain_initial_nonPAs <- floodplain_initial_df %>% 
+    filter(reserve_without_nj=="N") %>% pull(initial_floodplain)
+
+floodplain_initial_outputs <- c(mean(floodplain_initial_PAs), sd(floodplain_initial_PAs), 
+                          mean(floodplain_initial_nonPAs), sd(floodplain_initial_nonPAs))
+names(floodplain_initial_outputs) <- c("mean floodplain_initial_PAs", "sd floodplain_initial_PAs",
+                                 "mean floodplain_initial_nonPAs", "sd floodplain_initial_nonPAs")
+floodplain_initial_outputs
+
+wilcox.test(initial_floodplain ~ reserve_without_nj, data=floodplain_initial_df)
+```
+
+### 1.3 Compare the initial cropland% between the PAs and non-PAs 
+__Plot the initial cropland% between the PAs and non-PAs__  
+```{r}
+ggplot(floodplain_initial_df, aes(x=reserve_without_nj, y=initial_crop_perc)) +
+    geom_half_boxplot(fill="grey70")+
+    geom_half_point(color="grey30")+
+    scale_y_continuous(limits = c(0, 0.6), breaks=seq(0, 0.6, 0.2),
+                       labels = scales::percent_format(accuracy = 1)) +
+    scale_x_discrete(limits = c("Y", "N"),
+                     breaks = c("Y", "N"),
+                     labels = c("PAs", "non-PAs")) +
+    labs (x = "", y = "cropland%") +
+    theme_classic(base_size = 14) +
+    theme(legend.position = c(.99, .99),
+          legend.justification = c("right", "top"),
+          legend.box.just = "right")
+```
+
+__Compare the initial cropland% between the PAs and non-PAs using the Mann–Whitney U test__ 
+```{r}
+crop_perc_initial_PAs <- floodplain_initial_df %>% 
+    filter(reserve_without_nj=="Y") %>% pull(initial_crop_perc)
+crop_perc_initial_nonPAs <- floodplain_initial_df %>% 
+    filter(reserve_without_nj=="N") %>% pull(initial_crop_perc)
+
+crop_perc_initial_outputs <- c(mean(crop_perc_initial_PAs), sd(crop_perc_initial_PAs), 
+                          mean(crop_perc_initial_nonPAs), sd(crop_perc_initial_nonPAs))
+names(crop_perc_initial_outputs) <- c("mean crop_perc_initial_PAs", "sd crop_perc_initial_PAs",
+                                 "mean crop_perc_initial_nonPAs", "sd crop_perc_initial_nonPAs")
+crop_perc_initial_outputs
+
+wilcox.test(initial_crop_perc ~ reserve_without_nj, data=floodplain_initial_df)
+```
+
+## 2. Compare initial urban% between PAs and non-PAs  
+
+```{r}
+seg_urban_df <- read.csv(file="../data_preparation/seg_wise_urban.csv")
+str(seg_urban_df)
+```
+
+### 2.1 Prepare the dataframe and add reserve information  
+```{r}
+urban_initial_df <- seg_urban_df %>% 
+    mutate(f_year = as.factor(f_year),
+           groups = factor(groups, levels=groups_levels)) %>% # get the group levels right
+    filter(year <= 2006) %>%
+    group_by(groups) %>%
+    summarise(urban_perc_initial = mean(seg_urban_perc)) %>%
+    mutate(f_group = c(1:150)) %>%
+    mutate(reserve = case_when(f_group %in% c(22:30, 41:53, 88:104, 110:115, 127:131, 139:141) ~ "Y",
+                               TRUE ~ "N")) %>%
+    mutate(reserve_without_nj = case_when(f_group %in% c(22:30, 41:53, 88:104, 110:115, 139:141) ~ "Y",
+                                          TRUE ~ "N")) %>%
+    mutate(reserve_name = case_when(f_group %in% c(22:30) ~ "shishou",
+                                    f_group %in% c(41:53) ~ "honghu",
+                                    f_group %in% c(88:104) ~ "anqing",
+                                    f_group %in% c(110:115) ~ "tongling",
+                                    f_group %in% c(127:131) ~ "nanjing",
+                                    f_group %in% c(139:141) ~ "zhenjiang",
+                                    TRUE ~ "non-PAs")) %>%
+    mutate(reserve = as.factor(reserve),
+           reserve_without_nj = as.factor(reserve_without_nj),
+           reserve_name = as.factor(reserve_name)) %>%
+    # filter(f_group <= 145) %>%
+    droplevels() %>%
+    ungroup()
+summary(urban_initial_df)
+```
+
+__Plot the initial urban% between the PAs and non-PAs__   
+```{r}
+ggplot(urban_initial_df, aes(x = reserve_without_nj, y = urban_perc_initial)) +
+  geom_half_boxplot(fill="grey70") +
+  geom_half_point(color="grey30") +
+  scale_y_continuous(limits = c(0, 1), breaks=seq(0, 1, 0.2),
+                     labels = scales::percent_format(accuracy = 1)) +
+  scale_x_discrete(limits = c("Y", "N"),
+                   breaks = c("Y", "N"),
+                   labels = c("PAs", "non-PAs")) +
+  labs (x = "", y = "Urban%") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = c(.99, .99),
+        legend.justification = c("right", "top"),
+        legend.box.just = "right")
+```
+
+__Compare the initial urban% between the PAs and non-PAs using the Mann–Whitney U test__   
+```{r}
+urban_inital_PAs <- urban_initial_df %>% filter(reserve_without_nj =="Y") %>% pull(urban_perc_initial)
+urban_inital_nonPAs <- urban_initial_df %>% filter(reserve_without_nj =="N") %>% pull(urban_perc_initial)
+
+urban_inital_outputs <- c(mean(urban_inital_PAs), sd(urban_inital_PAs), 
+                          mean(urban_inital_nonPAs), sd(urban_inital_nonPAs))
+
+names(urban_inital_outputs) <- c("mean urb_inital_PAs", "sd urb_inital_PAs",
+                                 "mean urb_inital_nonPAs", "sd mean urb_inital_nonPAs")
+urban_inital_outputs
+
+wilcox.test(urban_perc_initial ~ reserve_without_nj, data=urban_initial_df)
+```
+
