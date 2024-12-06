@@ -1,0 +1,7 @@
+# R Specific
+.Rhistory
+.RData
+.Rproj
+
+# OS-specific
+.DS_Store
