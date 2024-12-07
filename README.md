@@ -6,6 +6,9 @@ This repository contains the data, code, and analysis for the research paper _"E
 
 ```plaintext
 FPA-Effects-Cetaceans/
+├── analysis/               # Analysis files
+│   ├── *.Rmd               # R Markdown files for analysis and visualization
+│   ├── *.nb.html           # Rendered notebook outputs
 ├── data/
 │   ├── raw/                # Raw data files (original data)
 │   │   ├── derived_csv/    # Derived raw CSV files (.csv) from geospatial and other sources
@@ -15,15 +18,16 @@ FPA-Effects-Cetaceans/
 ├── results/                # Final results for reporting
 │   ├── figures/            # Figures and visualizations for publications
 ├── scripts/                # Data processing scripts (.R)
-├── analysis/               # Analysis files
-│   ├── *.Rmd               # R Markdown files for analysis and visualization
-│   ├── *.nb.html           # Rendered notebook outputs
+├── .gitignore              # Files and directories to be ignored by Git
 ├── LICENSE                 # License for the repository
-├── README.md               # Overview of the repository
-└── .gitignore              # Files and directories to be ignored by Git
+└── README.md               # Overview of the repository
 ```
 
 ### Explanation of Key Directories
+- **`analysis/`**: Contains analysis-related files:
+  - **`.Rmd`**: R Markdown files for analysis, documentation, and visualization.
+  - **`.nb.html`**: Rendered HTML outputs from R Markdown for viewing results interactively.
+    
 - **`data/`**: Contains all data-related files, organized into:
   - **`raw/`**: Original and unprocessed data.
      - **`derived_csv/`**: Raw CSV files (`*.csv`) derived from geospatial or other sources.
@@ -35,16 +39,6 @@ FPA-Effects-Cetaceans/
   - **`figures/`**: Final visualizations such as plots and charts (`*.png`).
 
 - **`scripts/`**: R scripts designed to process raw data and generate processed datasets stored in the `data/processed/` folder (`*.R`).
- 
-- **`analysis/`**: Contains analysis-related files:
-  - **`.Rmd`**: R Markdown files for analysis, documentation, and visualization.
-  - **`.nb.html`**: Rendered HTML outputs from R Markdown for viewing results interactively.
-
-- **`LICENSE`**: The license governing the use of this repository.
-
-- **`README.md`**: Provides an overview of the repository, including its purpose and structure.
-
-- **`.gitignore`**: Specifies files and directories to be ignored by Git.
 
 ## 💻 How to Reproduce the Analysis
 1. Clone the repository: `git clone git@github.com:yhan178/FPA-Effects-Cetaceans.git`
