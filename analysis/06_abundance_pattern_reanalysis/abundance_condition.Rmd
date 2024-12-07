@@ -1,7 +1,7 @@
 ---
 title: "Summarizing features of representative river sections of porpoise distribution"
 author: "Yi Han"  
-date: "2021-12-03"
+date: "2024-07-03"
 output: html_notebook
 ---
 **Email**: yi.han.178@gmail.com  
@@ -26,7 +26,7 @@ library(gridExtra)
 low porpoise abundance, i.e., < 0.05 porpoise per km, in both 2006 and 2017.   
 
 ```{r}
-seg_wise_abund_df <- read.csv(file="../02_percentage_coverage_of_PAs/segment_wise_porpoise_abundance.csv")
+seg_wise_abund_df <- read.csv(file="../../data/analysis_outputs/animal_distribution/segment_wise_porpoise_abundance.csv")
 head(seg_wise_abund_df, 5)
 ```
 
@@ -51,7 +51,7 @@ more details).
 
 ```{r}
 seg_wise_floodplain_df <-
-    read.csv(file="../trend_analysis_habitats/floodplain_area_regression_results.csv")
+    read.csv(file="../../data/analysis_outputs/trend_analysis/floodplain_area_regression_results.csv")
 
 group_lvls <- seg_wise_floodplain_df$groups
 floodplain_df <- seg_wise_floodplain_df %>%
@@ -72,7 +72,7 @@ with an increased cropland% into the stable category (see Appendix S3 for
 more details).  
 
 ```{r}
-seg_wise_cropland_df <- read.csv(file="../trend_analysis_habitats/cropland_perc_regression_results.csv")
+seg_wise_cropland_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/cropland_perc_regression_results.csv")
 
 cropland_df <- seg_wise_cropland_df %>%
     mutate(groups = factor(groups, levels=group_lvls)) %>%
@@ -90,7 +90,7 @@ We grouped the “developed” and the “highly developed” as one category as
 and large increment in urban% (see Appendix S3 for more details).  
 
 ```{r}
-seg_wise_urban_df <- read.csv(file="../trend_analysis_habitats/urban_cluster_results.csv")
+seg_wise_urban_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/urban_cluster_results.csv")
 
 urban_df <- seg_wise_urban_df %>%
     mutate(groups = factor(groups, levels=group_lvls)) %>%

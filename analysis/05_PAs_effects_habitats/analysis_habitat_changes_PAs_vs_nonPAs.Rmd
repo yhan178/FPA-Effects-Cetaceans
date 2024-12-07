@@ -5,17 +5,14 @@ date: "2021-11-25"
 output: html_notebook
 ---
 **Email**: yi.han.178@gmail.com  
-**Description**: This file tests whether PAs had more river segments with 
-stable habitat conditions than the non-PAs. It generates statistical outputs 
-and produces Fig.5d-f in the main text.   
-
-It uses data in the files 'floodplain_area_regression_results.csv', 
-'cropland_perc_regression_results.csv', 'urban_cluster_results.csv' 
-in the 'trend_analysis_habitats' folder.  
+**Description**: This file tests whether FPAs had more river segments with 
+stable habitat conditions than the non-FPAs. It generates statistical outputs 
+and produces Fig.5d-f in the main text. It also generates statistical outputs
+in Appendix S5.
 
 ```{r include=FALSE}
 library(tidyverse)
-# library(fifer)
+library(gridExtra)
 ```
 
 ## 1. Examine if the PAs hold more river segments with stable floodplain area   
@@ -26,7 +23,7 @@ We grouped the nine segments with a decreased floodplain area into the stable
 category (see Appendix S3 for more details).  
 
 ```{r}
-seg_wise_floodplain_df <- read.csv(file="../trend_analysis_habitats/floodplain_area_regression_results.csv")
+seg_wise_floodplain_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/floodplain_area_regression_results.csv")
 group_lvls <- seg_wise_floodplain_df$groups
 floodplain_df <- seg_wise_floodplain_df %>%
     mutate(groups = factor(groups, levels=group_lvls)) %>%
@@ -45,8 +42,9 @@ head(floodplain_df, 5)
 __Plot the number of river segments of the PA and non-PA groups at each category__ 
 __of the floodplain area trend.__ (Fig. 5d)   
 
-```{r}
-ggplot(floodplain_df, aes(x = reserve_without_nj, 
+```{r fig.width=4, fig.height=3, tags=c()}
+trend_floodplain_compare <- 
+  ggplot(floodplain_df, aes(x = reserve_without_nj, 
                           color = flp_area_trend, fill=flp_area_trend)) +
       geom_bar(stat = "count", width=0.6, position = position_dodge(), color="black") + 
       scale_fill_manual(values = c("white", "grey50")) +
@@ -58,7 +56,10 @@ ggplot(floodplain_df, aes(x = reserve_without_nj,
       theme_classic(base_size = 14) +
       theme(legend.position = c(.1, .99),
             legend.justification = c("left", "top"),
-            legend.box.just = "left")
+            legend.box.just = "left",
+            legend.title = element_text(size = 8),
+            legend.text = element_text(size = 8))
+trend_floodplain_compare
 ```
 __Chi-square test__   
 
@@ -68,7 +69,7 @@ tbl_flp_trend
 chisq.test(tbl_flp_trend)
 ```
 The stable group actually contains 9 segments with increased floodplain areas, where
-8 from non-PAs and 1 from PAs. We now remove them for chi square analysis.
+8 from non-PAs and 1 from PAs. We now remove them for chi square analysis (Appendix S5).
 
 ```{r}
 tbl_flp_trend_remove_inc <- as.table(rbind(c(66, 39), c(23, 8)))
@@ -86,7 +87,7 @@ the four segments with an increased cropland% into the stable category
 (see Appendix S3 for more details).  
 
 ```{r}
-seg_wise_cropland_df <- read.csv(file="../trend_analysis_habitats/cropland_perc_regression_results.csv")
+seg_wise_cropland_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/cropland_perc_regression_results.csv")
 cropland_df <- seg_wise_cropland_df %>%
     mutate(groups = factor(groups, levels=group_lvls)) %>%
     mutate(group_levels = as.numeric(groups)) %>%
@@ -104,8 +105,9 @@ head(cropland_df, 5)
 __Plot the number of river segments of the PA and non-PA groups at each category__ 
 __of the cropland% trend.__ (Fig. 5e)   
 
-```{r}
-ggplot(cropland_df, aes(x=reserve_without_nj, color=crop_perc_trend, fill=crop_perc_trend)) +
+```{r fig.width=4, fig.height=3, tags=c()}
+trend_crop_perc_compare <-
+  ggplot(cropland_df, aes(x=reserve_without_nj, color=crop_perc_trend, fill=crop_perc_trend)) +
       geom_bar(stat = "count", width=0.6, position = position_dodge(), color="black") + 
       scale_fill_manual(values = c("white", "grey50")) +
       scale_y_continuous(expand = c(0, 0), limits = c(0, 80), breaks=seq(0, 80, 10)) +
@@ -116,7 +118,10 @@ ggplot(cropland_df, aes(x=reserve_without_nj, color=crop_perc_trend, fill=crop_p
       theme_classic(base_size = 14) +
       theme(legend.position = c(.1, .99),
             legend.justification = c("left", "top"),
-            legend.box.just = "left")
+            legend.box.just = "left",
+            legend.title = element_text(size = 8),
+            legend.text = element_text(size = 8))
+trend_crop_perc_compare
 ```
 
 __Chi-square test__   
@@ -128,7 +133,7 @@ chisq.test(tbl_crop_trend)
 ```
 
 The stable group actually contains 4 segments with decreased cropland%, where
-all 4 from non-PAs. We now remove them for Chi square analysis.
+all 4 from non-PAs. We now remove them for Chi square analysis (Appendix S5).
 
 ```{r}
 tbl_crop_trend_remove_dec <- as.table(rbind(c(62, 24), c(31, 24)))
@@ -145,7 +150,7 @@ as one category as “developed”, representing those river segments with relat
 large urban% and large increment in urban% (see Appendix S3 for more details).   
 
 ```{r}
-seg_wise_urban_df <- read.csv(file="../trend_analysis_habitats/urban_cluster_results.csv")
+seg_wise_urban_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/urban_cluster_results.csv")
 
 urban_df <- seg_wise_urban_df %>%
     mutate(groups = factor(groups, levels=group_lvls)) %>%
@@ -167,8 +172,9 @@ head(urban_df, 5)
 __Plot the number of river segments of the PA and non-PA groups at each category__ 
 __of the urban development levels.__ (Fig. 5f)   
 
-```{r}
-ggplot(urban_df, aes(x=reserve_without_nj, color=urban_levels, fill=urban_levels)) + 
+```{r fig.width=4, fig.height=3, tags=c()}
+trend_urban_levels_compare <- 
+  ggplot(urban_df, aes(x=reserve_without_nj, color=urban_levels, fill=urban_levels)) + 
     geom_bar(stat = "count", width=0.8, 
              position=position_dodge(preserve = "single"), color="black") +
     scale_fill_manual(values = c("white", "grey80", "grey30")) +
@@ -178,9 +184,12 @@ ggplot(urban_df, aes(x=reserve_without_nj, color=urban_levels, fill=urban_levels
                      labels = c("PAs", "non-PAs")) +
     labs (x = "", y = "Segment counts") +
     theme_classic(base_size = 14) +
-    theme(legend.position = c(.1, .99),
+    theme(legend.position = c(.1, 1.1),
           legend.justification = c("left", "top"),
-          legend.box.just = "left")
+          legend.box.just = "left",
+          legend.title = element_text(size = 8),
+          legend.text = element_text(size = 8))
+trend_urban_levels_compare
 ```
 
 __Chi-square test__   
@@ -199,4 +208,14 @@ library(RVAideMemoire)
 RVAideMemoire::fisher.multcomp(tbl_urban_trend, p.method = "bonferroni")
 ```
 
+```{r fig.width=4, fig.height=9, tags=c()}
+combined_plot <- grid.arrange(trend_floodplain_compare, 
+                              trend_crop_perc_compare, 
+                              trend_urban_levels_compare, 
+                              nrow = 3) 
+```
+
+```{r}
+# ggsave("../../results/figures/fig_5d_f_habitat_changes.png", combined_plot, width = 4, height = 9)
+```
 

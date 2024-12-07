@@ -31,12 +31,3 @@ This folder contains scripts and rendered outputs for analyzing habitat trends, 
 
 ## Citation
 If using any files in this folder for your work, please provide proper attribution and refer to the licensing information in the main repository README.
-
-
-
-
-
-
-
-
-
