@@ -88,6 +88,19 @@ wssplot <- function(data, nc=15, seed=178){
 
 wssplot(urb_std, nc=8) 
 ```
+
+```{r}
+# # Open a PNG device
+# png("../../results/figures/fig_S_2_wssplot.png", width = 1600, height = 1200, res = 300)
+# 
+# # Create the plot
+# p <- wssplot(urb_std, nc = 8)
+# 
+# # Close the device
+# dev.off()
+```
+
+
 Based on the following graph and considering the relatively small number of segments, 
 we classified segments into four clusters.   
 

@@ -52,6 +52,11 @@ yfp_locations <- ggplot(yfp, aes(x=DistMark, y=size, colour = f_year)) +
           strip.background = element_blank())
 yfp_locations
 ```
+```{r}
+# ggsave("../../results/figures/fig_S_1_porpoise_sighting_records.png", 
+#        yfp_locations, width = 8, height = 6)
+```
+
 
 **Summarize number of individuals sighted per 1 km for each survey.**
 

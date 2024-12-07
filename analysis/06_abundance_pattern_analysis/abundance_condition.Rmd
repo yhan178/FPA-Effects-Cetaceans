@@ -1,16 +1,17 @@
 ---
-title: "Summarizing features of representative river sections of porpoise distribution"
+title: "Effects of habitat changes and conservation status on porpoise abundance changes"
 author: "Yi Han"  
 date: "2024-07-03"
 output: html_notebook
 ---
 **Email**: yi.han.178@gmail.com  
-**Description**: The following code first summarized the segment-wise porpoise 
-abundance changes, changing trends of the floodplain area and cropland%, 
-and urban development levels (see section 1. segment-wise porpoise abundance changes 
-and habitat changes). This piece of code was derived from the file
-_'plot_segment_wise_habitat_changes_and_porpoise_gaps.Rmd'_ in folder
-_'trend_analysis_habitats\'_. 
+**Description**: This file corresponds to analysis of the effects of conservation 
+status and habitat changes on porpoise distributions, including (1) categorizes 
+river segments into five porpoise abundance patterns using Gaussian Mixture Model 
+and (2) applies multinomial logistic regression to examine the relationship between 
+abundance patterns and habitat conditions. It produces statistical results, tables
+and figures in Section 2.3.3 and Section 3.3 in the main text and in Appendix S7-9 
+(Tables S7-9 & Figure S3).
 
 ```{r include=FALSE}
 library(tidyverse)
@@ -20,10 +21,9 @@ library(broom)
 library(gridExtra)
 ```
 
-## 1. segment-wise porpoise abundance changes and habitat changes
+## 1. Prepare the dataframe with segment-wise porpoise abundance changes and habitat changes
 
-1.1 We define a distribution gap of the porpoise as a river sections with extremely
-low porpoise abundance, i.e., < 0.05 porpoise per km, in both 2006 and 2017.   
+1.1 Prepare the segment-wise porpoise abundance changes data frame.
 
 ```{r}
 seg_wise_abund_df <- read.csv(file="../../data/analysis_outputs/animal_distribution/segment_wise_porpoise_abundance.csv")
@@ -46,7 +46,7 @@ head(abund_df, 5)
 
 1.2 We grouped river segments into decreased and stable categories given whether 
 the floodplain area showed a significant decline. We grouped the nine segments 
-with a decreased floodplain area into the stable category (see Appendix S3 for 
+with a decreased floodplain area into the stable category (see Appendix S4 for 
 more details).  
 
 ```{r}
@@ -68,7 +68,7 @@ head(floodplain_df, 5)
 
 1.3 We grouped river segments into increased and stable categories given whether 
 the cropland% showed a significant increase. We grouped the four segments 
-with an increased cropland% into the stable category (see Appendix S3 for 
+with an increased cropland% into the stable category (see Appendix S4 for 
 more details).  
 
 ```{r}
@@ -85,9 +85,9 @@ cropland_df <- seg_wise_cropland_df %>%
 head(cropland_df, 5)
 ```
 
-We grouped the “developed” and the “highly developed” as one category as 
+1.4 We grouped the “developed” and the “highly developed” as one category as 
 “developed”, representing those river segments with relatively large urban% 
-and large increment in urban% (see Appendix S3 for more details).  
+and large increment in urban% (see Appendix S4 for more details).  
 
 ```{r}
 seg_wise_urban_df <- read.csv(file="../../data/analysis_outputs/trend_analysis/urban_cluster_results.csv")
@@ -107,7 +107,7 @@ urban_df <- seg_wise_urban_df %>%
 head(urban_df, 5)
 ```
 
-Combine above dataframes into a single dataframe for multivariate linear regression
+1.5 Combine above dataframes into a single dataframe for multivariate linear regression
 
 ```{r}
 df <- abund_df |> 
@@ -119,12 +119,15 @@ df
 
 ## 2. Clustering Porpoise Abundance Changing Patterns using Gaussiam Mixture Model
 
+2.1 We applied Gaussian Mixture Models with various covariance structures and a range of components (1 to 5) to data scaled across three key variables: initial abundance in 2006, final abundance in 2017, and the change in abundance. All data are scaled, ensuring that each variable contributes equally to the analysis.  
+
 ```{r}
 data_scaled <- scale(df[, c("abund_06", "abund_17", "abund_change")])
 ```
 
+2.2 Try models with a range of Gaussian components and covariance structures.  
 
-Try models with a range of Gaussian components and covariance structures
+Results were summarized by Table S7 in Appendix S7.
 
 ```{r}
 numComponents <- 1:5
@@ -142,7 +145,7 @@ for(model in covarianceModels) {
 }
 ```
 
-# Find the model and number of components with the highest BIC
+2.3 Find the model and number of components with the highest BIC
 
 ```{r}
 gmm_result <- Mclust(data_scaled, G=5, modelNames = "VII")
@@ -150,6 +153,8 @@ print(gmm_result$BIC)
 summary(gmm_result)
 df$gmm_cluster <- as.factor(gmm_result$classification)
 ```
+
+2.4 Scatter plot of clusters of porpoise abundance patterns based ont he selected model. 
 
 ```{r}
 pattern_plot1 <- ggplot(
@@ -180,14 +185,16 @@ pattern_plot2 <- ggplot(
   theme_minimal()
 pattern_plot2
 ```
-```{r}
+```{r fig.width=7, fig.height=7, tags=c()}
 combined_plot <- grid.arrange(pattern_plot1, pattern_plot2, ncol = 1) 
 # combined_plot
 ```
 
 ```{r}
-ggsave("combined_plots_abundance_clustesrs.png", combined_plot, width = 8, height = 8)
+# ggsave("../../results/figures/fig_S_3_abundance_clustesrs.png", combined_plot, width = 7, height = 7)
 ```
+
+## 3. Multinominal logistic regression
 
 We categorized river segments into five porpoise abundance patterns based on the outputs of the  Gaussian Mixture Model (GMM): 
 - no presence
@@ -195,8 +202,6 @@ We categorized river segments into five porpoise abundance patterns based on the
 - low-to-medium with minor decline
 - medium-to-high with major decline
 - increasing or high
-
-## multinominal logistic regression
 
 ```{r}
 df$gmm_cluster <- factor(df$gmm_cluster, levels = c("2", "1", "3", "5", "4"))
@@ -217,6 +222,7 @@ df$urban_levels <- factor(df$urban_levels,
                           levels = c("Less developed", "Fast developing", "Developed"))
 ```
 
+3.1 Summarize key features of the five porpoise abundance change patterns (see Appendix S7 & Table S9).  
 
 ```{r}
 df_summary_agg_vals <- df |>  
@@ -225,7 +231,11 @@ df_summary_agg_vals <- df |>
             mean_abund_change = round(mean(abund_change), 3))
 df_summary_agg_vals
 ```
+3.2 Multinomial logistic regression results across different reference categories. 
 
+Significant and marginally significant terms are summarized into Table S8 in Appendix S9.  
+
+3.2.1 Baseline: "no_presence"  
 
 ```{r}
 df$gmm_cluster <- relevel(df$gmm_cluster, ref = "no_presence")
@@ -240,6 +250,8 @@ mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |>
 mult_output
 ```
 
+3.2.2 Baseline: "low_subtle_increase"  
+
 ```{r}
 df$gmm_cluster <- relevel(df$gmm_cluster, ref = "low_subtle_increase")
 
@@ -252,6 +264,9 @@ mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |>
 
 mult_output
 ```
+
+3.2.3 Baseline: "low_med_minor_decline"  
+
 ```{r}
 df$gmm_cluster <- relevel(df$gmm_cluster, ref = "low_med_minor_decline")
 
@@ -265,6 +280,8 @@ mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |>
 mult_output
 ```
 
+3.2.4 Baseline:"med_high_major_decline"  
+
 ```{r}
 df$gmm_cluster <- relevel(df$gmm_cluster, ref = "med_high_major_decline")
 
@@ -277,6 +294,12 @@ mult_output <- tidy(multinom_model, conf.int = TRUE, exponentiate = TRUE) |>
 
 mult_output
 ```
+
+3.3 Summarize the characteristics of river segments by porpoise distribution patterns (Table S9), including:   
+(1) the total length of the river segments for each pattern;      
+(2) percentages of river segments with decreased floodplain area, increased cropland%, and different urbanization level;   
+(3) the percentage of FPA coverage;   
+(4) the average porpoise abundance in 2017 and the average abundance change.   
 
 ```{r}
 df_summary <- df |> 
@@ -299,17 +322,19 @@ df_summary <- df |>
 order <- c("no_presence", "low_subtle_increase", "low_med_minor_decline", "med_high_major_decline", "increasing_or_high")
 df_summary$gmm_cluster <- factor(df_summary$gmm_cluster, levels = order)
 df_summary <- df_summary[order(df_summary$gmm_cluster), ]
-df_summary
+# df_summary
 
 df_summary_agg_vals$gmm_cluster <- factor(df_summary_agg_vals$gmm_cluster, levels = order)
 df_summary_agg_vals <- df_summary_agg_vals[order(df_summary_agg_vals$gmm_cluster), ]
-df_summary_agg_vals
+# df_summary_agg_vals
 
 df_summary_sim <- df_summary |> 
   left_join(df_summary_agg_vals, by = "gmm_cluster") |> 
   select(!Groups_String)
 df_summary_sim
 ```
+
+3.4 List river segments corresponding to porpoise distribution patterns (Table S9)
 
 ```{r}
 df_summary_full <- df_summary |> 
