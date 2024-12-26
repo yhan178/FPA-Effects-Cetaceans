@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains the data, code, and analysis for the research paper _["Effects of Freshwater Protected Areas on Survival of a Critically Endangered Cetacean"](https://doi.org/10.1111/conl.13081)_.
+This repository contains the data, code, and analysis for the research paper _[Effects of Freshwater Protected Areas on Survival of a Critically Endangered Cetacean](https://doi.org/10.1111/conl.13081)_.
 
 ## 📖 Repository Structure
 
