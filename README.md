@@ -1,8 +1,9 @@
-# FPA-Effects-Cetaceans
+# Effects of Freshwater Protected Areas on Survival of a Critically Endangered Cetacean
 
 ## Overview
 
-This repository contains the data, code, and analysis for the research paper _[Effects of Freshwater Protected Areas on Survival of a Critically Endangered Cetacean](https://doi.org/10.1111/conl.13081)_.
+This repository contains the data and R code associated with the research paper:
+Han, Y., Xu, W., Wang, K., Wang, D., & Mei, Z. (2024). Effects of Freshwater Protected Areas on Survival of a Critically Endangered Cetacean. Conservation Letters, e13081. DOI: https://doi.org/10.1111/conl.13081.
 
 ## 📖 Repository Structure
 
